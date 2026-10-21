@@ -787,6 +787,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         weatherView.setVisibility(View.VISIBLE);
     }
 
+    /**
+     * Android is short of memory while Home is in the background (the 1.8 GB projector swaps with YouTube open):
+     * give back the poster and glass caches. The wallpaper stays, so Home comes back at once.
+     */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_BACKGROUND || level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL) {
+            if (channels != null) channels.trimMemory();
+            LiquidGlassDrawable.trimAll();
+        }
+    }
+
     @Override
     protected void onPause() {
         super.onPause();

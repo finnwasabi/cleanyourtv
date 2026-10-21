@@ -50,6 +50,9 @@ final class LiquidGlassDrawable extends Drawable {
     private int generation;
     private Bitmap shown;
     private final Paint blit = new Paint(Paint.FILTER_BITMAP_FLAG);
+    /** Every glass surface alive, so trimAll can drop their caches when Android runs short of memory. */
+    private static final java.util.Set<LiquidGlassDrawable> ALL =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private final Rect dst = new Rect();
 
     /**
@@ -65,6 +68,21 @@ final class LiquidGlassDrawable extends Drawable {
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(1.2f * density);
         Backdrop.register(host);
+        ALL.add(this);
+    }
+
+    /**
+     * Drops every cached surface but the one on screen (Home in the background, memory short): a few MB that an app
+     * in front can use. A surface not cached any more is drawn again, off the main thread, when it is next needed.
+     */
+    static void trimAll() {
+        for (LiquidGlassDrawable d : ALL) {
+            Bitmap keep = d.shown;
+            d.cache.clear();
+            d.pending.clear();
+            d.generation++;
+            d.shown = keep;
+        }
     }
 
     @Override

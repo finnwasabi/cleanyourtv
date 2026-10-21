@@ -99,6 +99,12 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
 
     void setHost(Host host) { this.host = host; }
 
+    /** Drops the posters kept for scrolling (Home in the background, memory short); those on cards stay. */
+    void trimMemory() {
+        cache.evictAll();
+        colors.clear();
+    }
+
     int rowCount() { return rows.size(); }
 
     /** Reloads the rows in the background; the list changes only when what it shows changed. */
