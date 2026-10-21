@@ -17,9 +17,13 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private final Paint band = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
+    /** Liquid glass band (theme key liquid_glass), drawn over the grid it decorates; null keeps the flat band. */
+    private final LiquidGlassDrawable glass;
+    private final android.graphics.Rect bounds = new android.graphics.Rect();
 
     /** @param translucent the cinematic shelf's band: the artwork and the glow show through it. */
-    DockDecoration(int dockSize, float density, boolean translucent) {
+    DockDecoration(int dockSize, float density, boolean translucent, View glassHost) {
+        this.glass = glassHost == null ? null : new LiquidGlassDrawable(glassHost, 26 * density, density, 0x1FFFFFFF);
         this.dockSize = dockSize;
         this.density = density;
         band.setColor(translucent ? 0x8C121014 : 0xFF141416);
@@ -67,6 +71,12 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         float side = Math.max(0f, Math.min(pad, Math.min(rect.left, parent.getWidth() - rect.right) - density));
         rect.inset(-side, -pad);
         float radius = 26 * density;
+        if (glass != null) {
+            rect.roundOut(bounds);
+            glass.setBounds(bounds);
+            glass.draw(c);
+            return;
+        }
         c.drawRoundRect(rect, radius, radius, band);
         c.drawRoundRect(rect, radius, radius, edge);
     }

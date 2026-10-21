@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The ChannelRows.Program a channel card shows, so focus checks can tell a program card from a tile. -->
+    <item name="program_tag" type="id" />
+</resources>
