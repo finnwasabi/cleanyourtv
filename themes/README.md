@@ -18,6 +18,7 @@ powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 th
 | `aurora/` | A dark aurora wallpaper (teal and violet on navy, darker at the bottom) with a matching background colour |
 | `dussehra/` | Festive skin for Dussehra (ends 21 Oct 2026): a marigold toran, a faint gold rangoli, a diya for Wi-Fi, a bell for Inputs, a marigold for Settings and a petal shower |
 | `six-columns/` | Six smaller tiles per row and one grid row visible under the dock |
+| `liquid-glass/` | The aurora wallpaper with `liquid_glass` on: the dock band, the top pills and the Inputs panel become frosted glass over it |
 
 ## Keys
 
@@ -65,6 +66,8 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `app_keys` | list of strings | Remote buttons that open an app, as `"190:com.google.android.youtube.tv"` or `"KEYCODE_BUTTON_3:com.google.android.youtube.tv"`, for `InputKeyService` or `HomeKeyService` |
 | `race_calendar` | list of races | F1 race-weekend mode: from 12 hours before a weekend's first session until 4 hours after the race starts, a panel under the clock shows the next session with a countdown (or the live one) and the weekend's session times in the TV's time zone. Write it with `tools/race_calendar.py <theme folder>`, which fetches the season from the free Jolpica API; the launcher itself never goes online |
 | `cinematic_home` | bool | Cinematic top shelf: the focused dock app's artwork, softened, fills the top of the screen in its colour, with a larger name, "Last opened" (apps opened from Home), dock position dots, a focus glow in the app's colour and a translucent dock band; off by default |
+| `liquid_glass` | bool | Frosted glass surfaces (dock band, focus glass, top pills, Inputs panel) that show a blurred copy of `wallpaper.jpg` behind them. The wallpaper is blurred once at 1/8 size and each surface is cached and drawn off the main thread, so it costs no blur per frame; without a wallpaper it falls back to a plain tint. Off unless set |
+| `channel_rows` | list of strings | Preview channels other apps publish to the TV provider (YouTube recommendations, a player's "Continue watching") as poster rows between the dock and the app grid, in this order: `"package"` for every channel of that app, `"package=Channel name"` for one. An empty list shows every browsable preview channel. Needs `pm grant com.gathin.tvhome android.permission.READ_TV_LISTINGS` once |
 
 ## Wallpapers
 
