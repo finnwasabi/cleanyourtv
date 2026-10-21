@@ -345,17 +345,6 @@
                 android:clipToPadding="false"
                 android:orientation="horizontal">
 
-                <!-- What another app is playing (MediaSession), shown only while it plays or is paused. -->
-                <TextView
-                    android:id="@+id/btnNowPlaying"
-                    style="@style/TopButton"
-                    android:maxWidth="320dp"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    android:drawableStart="@drawable/ic_now_playing"
-                    android:visibility="gone"
-                    android:nextFocusDown="@+id/grid" />
-
                 <TextView
                     android:id="@+id/btnInputs"
                     style="@style/TopButton"
@@ -387,6 +376,21 @@
                     android:drawableStart="@drawable/ic_settings"
                     android:nextFocusDown="@+id/grid" />
             </LinearLayout>
+
+            <!-- What another app is playing (MediaSession, or AirPlay audio), shown only while something plays: a small
+                 pill in the free space above the menu pills, its right end over Settings. -->
+            <TextView
+                android:id="@+id/btnNowPlaying"
+                style="@style/TopButton"
+                android:layout_height="32dp"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentEnd="true"
+                android:layout_marginStart="0dp"
+                android:maxWidth="320dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textSize="13sp"
+                android:visibility="gone" />
         </RelativeLayout>
 
         <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells.
