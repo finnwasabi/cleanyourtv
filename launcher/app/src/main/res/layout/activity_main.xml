@@ -379,8 +379,9 @@
 
         <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells.
              It runs to the screen edges, with the page margin as the grid's side padding, so a channel row can
-             reach the edge and show its next card peeking in. -->
-        <FrameLayout
+             reach the edge and show its next card peeking in, and fades rows out under the header (EdgeFadeLayout). -->
+        <com.gathin.tvhome.EdgeFadeLayout
+            android:id="@+id/gridFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
@@ -401,7 +402,7 @@
                 android:overScrollMode="never"
                 android:scrollbars="none"
                 android:descendantFocusability="afterDescendants" />
-        </FrameLayout>
+        </com.gathin.tvhome.EdgeFadeLayout>
     </LinearLayout>
 
     <!-- The single floating glass highlight that springs between tiles. -->
