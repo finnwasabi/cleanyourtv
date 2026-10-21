@@ -154,6 +154,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean weatherOn;
     /** The grid's frame, which fades rows out under the header. */
     private EdgeFadeLayout gridFrame;
+    /** The last focus was a channel card, so coming back to Home returns to it (ChannelsAdapter.focusLast). */
+    private boolean channelFocused;
     private View weatherView;
     private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
@@ -291,7 +293,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
-            if (weatherOn) Weather.refresh(MainActivity.this, handler, MainActivity.this::showWeather);
+            if (weatherOn) {
+                showWeather(Weather.cached(MainActivity.this));   // hides an answer gone stale
+                Weather.refresh(MainActivity.this, handler, MainActivity.this::showWeather);
+            }
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -477,6 +482,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         adapter.setSavedOrder(Order.ranks(Order.load(Order.file(this)), dockApps));
         channels = new ChannelsAdapter(this, grid, animations, reducedMotion);
         channels.setHost(this);
+        // Channel rows sit under the dock row; without one, the grid's navigation has no place for them.
+        if (!dockRow) channels.disable();
         home = new HomeAdapter(adapter, channels, dockRow ? COLUMNS : 0);
         grid.setAdapter(home);
 
@@ -769,6 +776,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         grid.post(() -> {
             int pos = adapter.positionOf(returnKey);
             if (returnToLibrary || libraryFocusPending) focusLibrary();
+            else if (channelFocused && channels.focusLast()) { /* back to the program that was opened */ }
             else focusTile(pos >= 0 ? pos : returnSlot);
             tilesReady = true;
             showCardPrompt();
@@ -841,6 +849,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     protected void onDestroy() {
         super.onDestroy();
         wallpaperPlayer.close();
+        if (channels != null) channels.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -924,6 +933,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private int focusedTilePosition() {
         View f = getCurrentFocus();
         if (f == null || f.getId() != R.id.card || !(f.getParent() instanceof View)) return -1;
+        if (f.getTag(R.id.program_tag) != null) return -1;   // a channel card: its parent is in the row's own list
         return appPos(grid.getChildAdapterPosition((View) f.getParent()));
     }
 
@@ -1156,6 +1166,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     @Override
     public void onTileFocused(int position, View card) {
+        channelFocused = false;
+        if (channels != null) channels.applyPending();
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
         // Focus restored before the first layout (cold start): the tile has no size yet, and the glass
@@ -1834,6 +1846,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     @Override public void onChannelFocused(View card, int color) {
         libraryFocusPending = false;
+        channelFocused = true;
         if (color != 0) showGlow(color);
         else hideHero();
         moveGlassTo(card, true);
@@ -1931,6 +1944,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     }
 
     private void focusLibrary() {
+        channelFocused = false;
         cancelPendingFocusScroll();
         int position = adapter.appCount();
         if (!adapter.isLibraryAt(position)) return;

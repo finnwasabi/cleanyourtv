@@ -83,6 +83,13 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     private final ExecutorService loader = Executors.newSingleThreadExecutor();
     private final ExecutorService posters = Executors.newFixedThreadPool(2);
     private boolean loading;
+    /** Off (dock_row false): no rows load, so none show. */
+    private boolean disabled;
+    /** Rows that arrived while a program had focus, applied once focus leaves the rows (applyPending). */
+    private List<ChannelRows.Row> pendingRows;
+    private String pendingSignature;
+    /** The row of the last focused program, for focusLast. */
+    private int lastRow = -1;
     /** Posters decoded at card size; a few MB, enough for every row on screen and a scroll each way. */
     private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(12 * 1024 * 1024) {
         @Override protected int sizeOf(String key, Bitmap value) { return value.getByteCount(); }
@@ -108,8 +115,32 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     int rowCount() { return rows.size(); }
 
     /** Reloads the rows in the background; the list changes only when what it shows changed. */
+    void disable() { disabled = true; }
+
+    /** Stops the loader and poster threads with the activity, so a recreate does not leave them behind. */
+    void close() {
+        loader.shutdownNow();
+        posters.shutdownNow();
+    }
+
+    /** Focuses the program that had focus last (back from the app it opened); false when there is none. */
+    boolean focusLast() {
+        if (lastRow < 0 || lastRow >= rows.size()) return false;
+        focusRow(lastRow, -1);
+        return true;
+    }
+
+    /** Applies rows that arrived while a program had focus; called when focus moves to the app grid. */
+    void applyPending() {
+        if (pendingRows == null || hasFocus()) return;
+        rows = pendingRows;
+        signature = pendingSignature;
+        pendingRows = null;
+        notifyDataSetChanged();
+    }
+
     void refresh() {
-        if (loading) return;
+        if (loading || disabled) return;
         loading = true;
         loader.execute(() -> {
             List<ChannelRows.Row> next = ChannelRows.load(ctx);
@@ -119,8 +150,13 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             main.post(() -> {
                 loading = false;
                 if (sig.equals(signature)) return;
-                // A rebind under the focused program would drop focus; try again on the next refresh.
-                if (hasFocus()) return;
+                // A rebind under the focused program would drop focus; keep them until focus leaves the rows.
+                if (hasFocus()) {
+                    pendingRows = next;
+                    pendingSignature = sig;
+                    return;
+                }
+                pendingRows = null;
                 signature = sig;
                 rows = next;
                 notifyDataSetChanged();
@@ -255,7 +291,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 list.setLayoutParams(llp);
             }
             list.setPadding(start, list.getPaddingTop(), end, list.getPaddingBottom());
-            programs.set(row);
+            // The same row again (Home rebinding everything on resume): leave the cards, their posters and focus.
+            if (programs.row != row) programs.set(row);
         }
 
         /**
@@ -301,23 +338,39 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         void focusColumn(int column) {
             RecyclerView.ViewHolder h = list.findViewHolderForAdapterPosition(column);
             if (h instanceof ProgramHolder) {
-                ((ProgramHolder) h).card.requestFocus();
+                take((ProgramHolder) h);
                 return;
             }
             list.scrollToPosition(column);
             list.post(() -> {
                 RecyclerView.ViewHolder p = list.findViewHolderForAdapterPosition(column);
-                if (p instanceof ProgramHolder) ((ProgramHolder) p).card.requestFocus();
+                if (p instanceof ProgramHolder) take((ProgramHolder) p);
             });
+        }
+
+        /**
+         * Focuses a card. One that kept focus while Home was away (back from the program it opened) gets no new
+         * focus event, so the glass and the glow are put on it here.
+         */
+        private void take(ProgramHolder p) {
+            if (p.card.isFocused()) {
+                if (host != null) host.onChannelFocused(p.card, posterColor(p));
+            } else {
+                p.card.requestFocus();
+            }
         }
 
         final class ProgramAdapter extends RecyclerView.Adapter<ProgramHolder> {
             ChannelRows.Row row;
 
+            ProgramAdapter() { setHasStableIds(true); }
+
             void set(ChannelRows.Row r) {
                 row = r;
                 notifyDataSetChanged();
             }
+
+            @Override public long getItemId(int position) { return row.programs.get(position).id; }
 
             @Override public int getItemCount() { return row == null ? 0 : row.programs.size(); }
 
@@ -348,6 +401,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 poster = v.findViewById(R.id.poster);
                 fallback = v.findViewById(R.id.posterLabel);
                 name = v.findViewById(R.id.name);
+                // No fading edges on the scrolling name: they draw through an offscreen layer every frame.
+                name.setHorizontalFadingEdgeEnabled(false);
                 progressTrack = v.findViewById(R.id.progressTrack);
                 progress = v.findViewById(R.id.progress);
                 card.setOutlineProvider(new ViewOutlineProvider() {
@@ -403,10 +458,12 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 card.setScaleX(focused ? scale : 1f);
                 card.setScaleY(focused ? scale : 1f);
                 name.setAlpha(focused ? 1f : 0f);
+                name.setSelected(focused);
                 card.setOnClickListener(v -> open(row, p));
                 card.setOnFocusChangeListener((v, has) -> {
                     v.animate().cancel();
                     name.animate().cancel();
+                    name.setSelected(has);   // a long title scrolls by twice, as a tile's name does
                     float s = has ? scale : 1f;
                     if (!animations) {
                         name.setAlpha(has ? 1f : 0f);
@@ -424,6 +481,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                     }
                     if (!has) return;
                     lastColumn.put(row.id, column);
+                    lastRow = rowIndex;
                     if (host != null) host.onChannelFocused(v, posterColor(this));
                 });
                 card.setOnKeyListener((v, key, event) -> {
@@ -532,26 +590,29 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
 
     /** Opens a program the way the stock launcher does: its intent_uri, else the app itself. */
     private void open(ChannelRows.Row row, ChannelRows.Program p) {
+        // A Watch Next row mixes apps: each program opens in the app that published it.
+        String pkg = p.pkg != null ? p.pkg : row.pkg;
+        if (pkg == null) return;
         Intent i = null;
         if (p.intentUri != null && !p.intentUri.isEmpty()) {
             try {
                 i = Intent.parseUri(p.intentUri, Intent.URI_INTENT_SCHEME);
                 // A program may only start the app that published it.
-                if (i.getComponent() != null && !row.pkg.equals(i.getComponent().getPackageName())) i = null;
-                else if (i.getComponent() == null) i.setPackage(row.pkg);
+                if (i.getComponent() != null && !pkg.equals(i.getComponent().getPackageName())) i = null;
+                else if (i.getComponent() == null) i.setPackage(pkg);
                 if (i != null) i.setSelector(null);
             } catch (Exception e) {
                 i = null;
             }
         }
-        if (i == null) i = ctx.getPackageManager().getLeanbackLaunchIntentForPackage(row.pkg);
-        if (i == null) i = ctx.getPackageManager().getLaunchIntentForPackage(row.pkg);
+        if (i == null) i = ctx.getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
+        if (i == null) i = ctx.getPackageManager().getLaunchIntentForPackage(pkg);
         if (i == null) return;
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
             ctx.startActivity(i);
         } catch (ActivityNotFoundException | SecurityException e) {
-            Intent app = ctx.getPackageManager().getLeanbackLaunchIntentForPackage(row.pkg);
+            Intent app = ctx.getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
             if (app != null) {
                 try { ctx.startActivity(app.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); } catch (Exception ignored) { }
             }
@@ -561,6 +622,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     // ---- posters -----------------------------------------------------------------------------------
 
     private void loadPoster(RowHolder.ProgramHolder h, String url, int w, int hgt) {
+        // Already showing this poster: keep it, rather than blank the card and fetch it again.
+        if (url != null && url.equals(h.url) && h.poster.getDrawable() != null) return;
         h.url = url;
         h.poster.setImageDrawable(null);
         if (url == null || url.isEmpty()) return;

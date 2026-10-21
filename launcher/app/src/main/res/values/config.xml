@@ -23,6 +23,7 @@
          "package=Channel name". Empty: every browsable preview channel. Needs the READ_TV_LISTINGS grant
          (pm grant com.gathin.tvhome android.permission.READ_TV_LISTINGS); a theme can set "channel_rows". -->
     <string-array name="channel_rows">
+        <item>@watch_next=Tiếp tục xem</item>
         <item>com.nuvio.tv=Tiếp tục xem</item>
         <item>com.google.android.youtube.tv=Đề xuất cho bạn</item>
     </string-array>

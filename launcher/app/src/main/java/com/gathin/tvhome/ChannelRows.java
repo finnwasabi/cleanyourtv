@@ -8,10 +8,6 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,12 +24,18 @@ import java.util.Map;
  *
  * Which channels show, in order: channel_rows in config.xml or a theme's config.json, as "package" (every
  * channel of that app) or "package=Channel name". Empty: every browsable preview channel, in provider order.
+ * "@watch_next=Row name" is the system's Watch Next list instead: what you were watching in every app that
+ * reports it (Play Next on Google TV), the most recent first.
  * No Android UI types here, so the parsing can be read on its own.
  */
 final class ChannelRows {
     private static final String TAG = "TvHome.Channels";
     private static final Uri CHANNELS = Uri.parse("content://android.media.tv/channel");
     private static final Uri PROGRAMS = Uri.parse("content://android.media.tv/preview_program");
+    private static final Uri WATCH_NEXT = Uri.parse("content://android.media.tv/watch_next_program");
+    static final String WATCH_NEXT_KEY = "@watch_next";
+    /** The Watch Next row's id: channel ids start at 1. */
+    static final long WATCH_NEXT_ID = 0;
     /** Programs kept per row: enough to scroll through, few enough that a row of posters stays light. */
     static final int MAX_PROGRAMS = 20;
 
@@ -47,8 +49,11 @@ final class ChannelRows {
         final String intentUri;
         /** Watched share in thousandths, or -1 when the program carries no position. */
         final int progress;
+        /** The app that published it; the row's own package for a channel row. */
+        final String pkg;
 
-        Program(long id, String title, String subtitle, String poster, float aspect, String intentUri, int progress) {
+        Program(long id, String title, String subtitle, String poster, float aspect, String intentUri, int progress,
+                String pkg) {
             this.id = id;
             this.title = title;
             this.subtitle = subtitle;
@@ -56,6 +61,7 @@ final class ChannelRows {
             this.aspect = aspect;
             this.intentUri = intentUri;
             this.progress = progress;
+            this.pkg = pkg;
         }
     }
 
@@ -85,25 +91,16 @@ final class ChannelRows {
     /** The channel_rows filter: config.json overrides config.xml. */
     static List<String> filter(Context ctx) {
         List<String> fallback = new ArrayList<>(Arrays.asList(ctx.getResources().getStringArray(R.array.channel_rows)));
-        File dir = Config.dir(ctx);
-        File file = dir == null ? null : new File(dir, Config.FILE_NAME);
-        if (file == null || !file.isFile() || file.length() > 64 * 1024) return fallback;
-        try (InputStream in = new FileInputStream(file)) {
-            byte[] buf = new byte[(int) file.length()];
-            int n = 0, r;
-            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
-            JSONObject json = new JSONObject(new String(buf, 0, n, StandardCharsets.UTF_8));
-            JSONArray list = json.optJSONArray("channel_rows");
-            if (list == null) return fallback;
-            List<String> out = new ArrayList<>();
-            for (int i = 0; i < list.length(); i++) {
-                String s = list.optString(i, "").trim();
-                if (!s.isEmpty()) out.add(s);
-            }
-            return out;
-        } catch (Exception e) {
-            return fallback;
+        JSONObject json = Config.theme(ctx);
+        if (json == null) return fallback;
+        JSONArray list = json.optJSONArray("channel_rows");
+        if (list == null) return fallback;
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < list.length(); i++) {
+            String s = list.optString(i, "").trim();
+            if (!s.isEmpty()) out.add(s);
         }
+        return out;
     }
 
     /** Index of the filter entry a channel matches, or -1. An entry is "package" or "package=Channel name". */
@@ -130,12 +127,66 @@ final class ChannelRows {
         }
     }
 
+    /** The Watch Next list as one row, the most recently watched first; null when it is empty or unreadable. */
+    private static Row watchNext(Context ctx, String name) {
+        List<long[]> order = new ArrayList<>();
+        List<Program> found = new ArrayList<>();
+        Map<String, Integer> perApp = new HashMap<>();
+        try (Cursor c = ctx.getContentResolver().query(WATCH_NEXT,
+                new String[]{"_id", "package_name", "title", "episode_title", "season_display_number",
+                        "episode_display_number", "poster_art_uri", "thumbnail_uri", "poster_art_aspect_ratio",
+                        "intent_uri", "last_playback_position_millis", "duration_millis", "browsable",
+                        "last_engagement_time_utc_millis"}, null, null, null)) {
+            if (c == null) return null;
+            while (c.moveToNext()) {
+                if (c.getInt(12) == 0) continue;
+                String pkg = c.getString(1);
+                String poster = c.getString(6);
+                if (poster == null || poster.isEmpty()) poster = c.getString(7);
+                String season = c.getString(4), episode = c.getString(5), episodeTitle = c.getString(3);
+                StringBuilder sub = new StringBuilder();
+                if (season != null && !season.isEmpty()) sub.append("S").append(season);
+                if (episode != null && !episode.isEmpty()) sub.append(sub.length() > 0 ? " · " : "").append("E").append(episode);
+                if (episodeTitle != null && !episodeTitle.isEmpty()) sub.append(sub.length() > 0 ? " · " : "").append(episodeTitle);
+                long pos = c.getLong(10), dur = c.getLong(11);
+                int progress = pos > 0 && dur > 0 ? (int) Math.min(1000, pos * 1000 / dur) : -1;
+                found.add(new Program(c.getLong(0), c.getString(2), sub.toString(), poster, aspect(c.getInt(8)),
+                        c.getString(9), progress, pkg));
+                order.add(new long[]{c.getLong(13), found.size() - 1});
+                perApp.merge(String.valueOf(pkg), 1, Integer::sum);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "watch next unavailable: " + e);
+            return null;
+        }
+        Log.i(TAG, "watch next: " + perApp);
+        if (found.isEmpty()) return null;
+        Collections.sort(order, (a, b) -> Long.compare(b[0], a[0]));
+        List<Program> programs = new ArrayList<>();
+        for (long[] o : order) {
+            if (programs.size() >= MAX_PROGRAMS) break;
+            programs.add(found.get((int) o[1]));
+        }
+        return new Row(WATCH_NEXT_ID, null, name, programs);
+    }
+
     /** Reads the rows on the caller's thread (call it off the main thread). Never throws. */
     static List<Row> load(Context ctx) {
         List<String> filter = filter(ctx);
         Map<Long, Row> byId = new HashMap<>();
         List<Row> rows = new ArrayList<>();
         Map<Long, Integer> rank = new HashMap<>();
+        for (int i = 0; i < filter.size(); i++) {
+            String f = filter.get(i);
+            if (!f.startsWith(WATCH_NEXT_KEY)) continue;
+            int eq = f.indexOf('=');
+            Row wn = watchNext(ctx, eq < 0 ? "" : f.substring(eq + 1).trim());
+            if (wn != null) {
+                rows.add(wn);
+                rank.put(wn.id, i);
+            }
+            break;
+        }
         try (Cursor c = ctx.getContentResolver().query(CHANNELS,
                 new String[]{"_id", "package_name", "display_name", "type", "browsable"}, null, null, null)) {
             if (c == null) return Collections.emptyList();
@@ -162,6 +213,8 @@ final class ChannelRows {
             return Collections.emptyList();
         }
         if (rows.isEmpty()) return rows;
+        if (byId.isEmpty()) return rows;   // the Watch Next row alone
+
         try (Cursor c = ctx.getContentResolver().query(PROGRAMS,
                 new String[]{"_id", "channel_id", "title", "episode_title", "season_display_number",
                         "episode_display_number", "poster_art_uri", "thumbnail_uri", "poster_art_aspect_ratio",
@@ -181,14 +234,22 @@ final class ChannelRows {
                     long pos = c.getLong(10), dur = c.getLong(11);
                     int progress = pos > 0 && dur > 0 ? (int) Math.min(1000, pos * 1000 / dur) : -1;
                     row.programs.add(new Program(c.getLong(0), c.getString(2), sub.toString(), poster,
-                            aspect(c.getInt(8)), c.getString(9), progress));
+                            aspect(c.getInt(8)), c.getString(9), progress, row.pkg));
                 }
             }
         } catch (Exception e) {
             Log.w(TAG, "programs unavailable: " + e);
         }
+        // A channel row named like the Watch Next row (Nuvio's own "Continue watching") is its fallback: shown
+        // only while Watch Next is empty, never twice.
+        String wnName = null;
+        for (Row row : rows) if (row.id == WATCH_NEXT_ID) wnName = row.name;
         List<Row> out = new ArrayList<>();
-        for (Row row : rows) if (!row.programs.isEmpty()) out.add(row);
+        for (Row row : rows) {
+            if (row.programs.isEmpty()) continue;
+            if (wnName != null && row.id != WATCH_NEXT_ID && row.name.trim().equalsIgnoreCase(wnName.trim())) continue;
+            out.add(row);
+        }
         Collections.sort(out, (a, b) -> Integer.compare(rank.get(a.id), rank.get(b.id)));
         return out;
     }
