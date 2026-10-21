@@ -156,9 +156,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private EdgeFadeLayout gridFrame;
     /** The last focus was a channel card, so coming back to Home returns to it (ChannelsAdapter.focusLast). */
     private boolean channelFocused;
-    /** Top shelf artwork (showShelf) and the URL it shows or is loading. */
-    private ImageView shelfArt;
-    private String shelfUrl;
     private View weatherView;
     private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
@@ -358,11 +355,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // shelf would render it through an offscreen buffer first, as the glow above notes.
         hero.forceHasOverlappingRendering(false);
         heroMeta = findViewById(R.id.heroMeta);
-        // Keeps its line even when empty, so the name above the dock does not jump when the top shelf fills it.
-        heroMeta.setVisibility(View.INVISIBLE);
         heroDots = findViewById(R.id.heroDots);
         heroArt = findViewById(R.id.heroArt);
-        shelfArt = findViewById(R.id.shelfArt);
         cinematic = cfg.cinematicHome;
         if (cinematic) setUpCinematicShelf();
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
@@ -1290,65 +1284,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     // ---- top shelf -------------------------------------------------------------------------------
 
-    /**
-     * The top shelf, as on Apple TV: the focused dock app's Watch Next or first channel program, large on the right
-     * above the dock, and under its name what it is ("Tiếp tục xem  Người Nhện"). Nothing for an app without one.
-     */
-    private void showShelf(int position, float dockTopInRoot) {
-        ChannelsAdapter.Featured f = channels == null || cinematic ? null : channels.featured(adapter.packageAt(position));
-        if (f == null) {
-            hideShelf();
-            if (!cinematic) heroMeta.setVisibility(View.INVISIBLE);
-            return;
-        }
-        String row = f.rowName == null ? "" : f.rowName;
-        android.text.SpannableString meta = new android.text.SpannableString(
-                row.toUpperCase(getResources().getConfiguration().getLocales().get(0)) + "   " + f.program.title);
-        meta.setSpan(new android.text.style.ForegroundColorSpan(0x99FFFFFF), 0, row.length(), 0);
-        meta.setSpan(new android.text.style.RelativeSizeSpan(0.8f), 0, row.length(), 0);
-        meta.setSpan(new android.text.style.ForegroundColorSpan(0xF2FFFFFF), row.length(), meta.length(), 0);
-        heroMeta.setText(meta);
-        heroMeta.setVisibility(View.VISIBLE);
-        int w = Math.round(root.getWidth() * 0.68f), h = Math.round(dockTopInRoot + 24 * density);
-        if (w <= 0 || h <= 0) return;
-        ViewGroup.LayoutParams lp = shelfArt.getLayoutParams();
-        if (lp.width != w || lp.height != h) {
-            lp.width = w;
-            lp.height = h;
-            shelfArt.setLayoutParams(lp);
-        }
-        String url = f.program.poster;
-        if (url.equals(shelfUrl) && shelfArt.getDrawable() != null) {
-            shelfArt.animate().alpha(1f).setDuration(animations ? 260 : 0).start();
-            return;
-        }
-        shelfUrl = url;
-        channels.shelfArt(url, w, h, art -> {
-            if (!url.equals(shelfUrl) || !heroShown) return;
-            if (!animations) {
-                shelfArt.setImageBitmap(art);
-                shelfArt.setAlpha(1f);
-                return;
-            }
-            shelfArt.animate().cancel();
-            shelfArt.animate().alpha(0f).setDuration(shelfArt.getAlpha() > 0f ? 120 : 0).withEndAction(() -> {
-                shelfArt.setImageBitmap(art);
-                shelfArt.animate().alpha(1f).setDuration(380).start();
-            }).start();
-        });
-    }
-
-    private void hideShelf() {
-        shelfUrl = null;
-        shelfArt.animate().cancel();
-        if (shelfArt.getAlpha() == 0f) return;
-        if (animations && !reducedMotion) shelfArt.animate().alpha(0f).setDuration(160).start();
-        else shelfArt.setAlpha(0f);
-    }
-
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
-        showShelf(position, dockTopInRoot);
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
@@ -1604,7 +1541,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     /** The glow behind the grid in {@code color}, without the big name; a channel card passes its poster's colour. */
     private void showGlow(int color) {
-        hideShelf();   // the shelf belongs to the dock; left on, it sat behind the rows while they scrolled
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -1630,7 +1566,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     private void hideHero() {
         if (!heroShown) return;
-        hideShelf();
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
