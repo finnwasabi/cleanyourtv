@@ -11,7 +11,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The current weather beside the date: temperature, a one or two word condition and a glyph (WeatherIcon). It comes
@@ -23,7 +22,7 @@ final class Weather {
     static final long REFRESH_MS = 30 * 60 * 1000L;
     /** An answer older than this is not shown: three hours on, it says nothing about now. */
     private static final long STALE_MS = 3 * 60 * 60 * 1000L;
-    private static final ExecutorService NET = Executors.newSingleThreadExecutor();
+    private static final ExecutorService NET = BackgroundThreads.single("weather");
 
     static final class Now {
         final int temp;

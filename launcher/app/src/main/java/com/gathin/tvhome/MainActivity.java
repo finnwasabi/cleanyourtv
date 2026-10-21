@@ -156,6 +156,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private EdgeFadeLayout gridFrame;
     /** The last focus was a channel card, so coming back to Home returns to it (ChannelsAdapter.focusLast). */
     private boolean channelFocused;
+    /** Top shelf artwork (showShelf) and the URL it shows or is loading. */
+    private ImageView shelfArt;
+    private String shelfUrl;
     private View weatherView;
     private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
@@ -253,7 +256,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         public void onInputRemoved(String inputId) {
             updateInputsButton();
         }
+
+        @Override
+        public void onInputStateChanged(String inputId, int state) {
+            onHdmiState(inputId, state);
+        }
     };
+    /** Last known state of each HDMI input, so only a change to connected (a cable in, a PC woken) is news. */
+    private final Map<String, Integer> hdmiStates = new HashMap<>();
+    /** The HDMI input the Inputs pill offers right now, or null while it is the plain Inputs pill. */
+    private String hdmiReady;
+    private final Runnable hdmiReadyEnd = () -> setHdmiReady(null, null);
     /** Listens for any VPN coming up or going down, even one this app's traffic is excluded from. */
     private final ConnectivityManager.NetworkCallback vpnCallback = new ConnectivityManager.NetworkCallback() {
         @Override
@@ -345,8 +358,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // shelf would render it through an offscreen buffer first, as the glow above notes.
         hero.forceHasOverlappingRendering(false);
         heroMeta = findViewById(R.id.heroMeta);
+        // Keeps its line even when empty, so the name above the dock does not jump when the top shelf fills it.
+        heroMeta.setVisibility(View.INVISIBLE);
         heroDots = findViewById(R.id.heroDots);
         heroArt = findViewById(R.id.heroArt);
+        shelfArt = findViewById(R.id.shelfArt);
         cinematic = cfg.cinematicHome;
         if (cinematic) setUpCinematicShelf();
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
@@ -553,7 +569,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
-        btnInputs.setOnClickListener(v -> showInputs());
+        btnInputs.setOnClickListener(v -> {
+            // Something was just plugged in: the pill offers it, one press switches to it.
+            if (hdmiReady != null) {
+                String id = hdmiReady;
+                setHdmiReady(null, null);
+                openInput(id);
+            } else {
+                showInputs();
+            }
+        });
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
@@ -616,6 +641,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.registerCallback(inputCallback, handler);
+        snapshotHdmiStates();
         if (cm != null) {
             cm.registerDefaultNetworkCallback(networkCallback);
             cm.registerNetworkCallback(new NetworkRequest.Builder()
@@ -1264,8 +1290,65 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     // ---- top shelf -------------------------------------------------------------------------------
 
+    /**
+     * The top shelf, as on Apple TV: the focused dock app's Watch Next or first channel program, large on the right
+     * above the dock, and under its name what it is ("Tiếp tục xem  Người Nhện"). Nothing for an app without one.
+     */
+    private void showShelf(int position, float dockTopInRoot) {
+        ChannelsAdapter.Featured f = channels == null || cinematic ? null : channels.featured(adapter.packageAt(position));
+        if (f == null) {
+            hideShelf();
+            if (!cinematic) heroMeta.setVisibility(View.INVISIBLE);
+            return;
+        }
+        String row = f.rowName == null ? "" : f.rowName;
+        android.text.SpannableString meta = new android.text.SpannableString(
+                row.toUpperCase(getResources().getConfiguration().getLocales().get(0)) + "   " + f.program.title);
+        meta.setSpan(new android.text.style.ForegroundColorSpan(0x99FFFFFF), 0, row.length(), 0);
+        meta.setSpan(new android.text.style.RelativeSizeSpan(0.8f), 0, row.length(), 0);
+        meta.setSpan(new android.text.style.ForegroundColorSpan(0xF2FFFFFF), row.length(), meta.length(), 0);
+        heroMeta.setText(meta);
+        heroMeta.setVisibility(View.VISIBLE);
+        int w = Math.round(root.getWidth() * 0.68f), h = Math.round(dockTopInRoot + 24 * density);
+        if (w <= 0 || h <= 0) return;
+        ViewGroup.LayoutParams lp = shelfArt.getLayoutParams();
+        if (lp.width != w || lp.height != h) {
+            lp.width = w;
+            lp.height = h;
+            shelfArt.setLayoutParams(lp);
+        }
+        String url = f.program.poster;
+        if (url.equals(shelfUrl) && shelfArt.getDrawable() != null) {
+            shelfArt.animate().alpha(1f).setDuration(animations ? 260 : 0).start();
+            return;
+        }
+        shelfUrl = url;
+        channels.shelfArt(url, w, h, art -> {
+            if (!url.equals(shelfUrl) || !heroShown) return;
+            if (!animations) {
+                shelfArt.setImageBitmap(art);
+                shelfArt.setAlpha(1f);
+                return;
+            }
+            shelfArt.animate().cancel();
+            shelfArt.animate().alpha(0f).setDuration(shelfArt.getAlpha() > 0f ? 120 : 0).withEndAction(() -> {
+                shelfArt.setImageBitmap(art);
+                shelfArt.animate().alpha(1f).setDuration(380).start();
+            }).start();
+        });
+    }
+
+    private void hideShelf() {
+        shelfUrl = null;
+        shelfArt.animate().cancel();
+        if (shelfArt.getAlpha() == 0f) return;
+        if (animations && !reducedMotion) shelfArt.animate().alpha(0f).setDuration(160).start();
+        else shelfArt.setAlpha(0f);
+    }
+
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
+        showShelf(position, dockTopInRoot);
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
@@ -1521,6 +1604,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     /** The glow behind the grid in {@code color}, without the big name; a channel card passes its poster's colour. */
     private void showGlow(int color) {
+        hideShelf();   // the shelf belongs to the dock; left on, it sat behind the rows while they scrolled
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -1546,6 +1630,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     private void hideHero() {
         if (!heroShown) return;
+        hideShelf();
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -2326,6 +2411,57 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     /** Switches to a passthrough input (HDMI, AV). The standard way is ACTION_VIEW on its channel URI,
      *  which the Live TV app handles; where nothing takes that, the configured `input_action` is sent
      *  with the same URI instead (XGIMI's HDMI player only answers com.xgimi.action.hdmiPlayer). */
+    /**
+     * An HDMI input changed state. Turning connected (a cable plugged in, or the PC on it waking) turns the Inputs
+     * pill into "PC connected" for a minute, and one press switches to it; disconnecting turns it back. The
+     * framework calls this, nothing is polled.
+     */
+    private void onHdmiState(String inputId, int state) {
+        Integer before = hdmiStates.put(inputId, state);
+        TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
+        TvInputInfo info = tim == null ? null : tim.getTvInputInfo(inputId);
+        if (info == null || !info.isPassthroughInput() || info.getType() != TvInputInfo.TYPE_HDMI || info.isHidden(this)) return;
+        if (state == TvInputManager.INPUT_STATE_CONNECTED && before != null && before != TvInputManager.INPUT_STATE_CONNECTED) {
+            CharSequence custom = info.loadCustomLabel(this);
+            CharSequence name = custom != null && custom.length() > 0 ? custom : info.loadLabel(this);
+            setHdmiReady(inputId, getString(R.string.input_ready, name));
+        } else if (state != TvInputManager.INPUT_STATE_CONNECTED && inputId.equals(hdmiReady)) {
+            setHdmiReady(null, null);
+        }
+    }
+
+    /** The pill offers {@code inputId} as {@code label}, or (null) goes back to plain Inputs. */
+    private void setHdmiReady(String inputId, String label) {
+        handler.removeCallbacks(hdmiReadyEnd);
+        hdmiReady = inputId;
+        btnInputs.animate().cancel();
+        // The festive skin draws the pill as a bell with no text; it keeps its bell.
+        if (btnInputs instanceof TextView && !festive) {
+            ((TextView) btnInputs).setText(label != null ? label : getString(R.string.inputs));
+        }
+        btnInputs.setAlpha(1f);
+        if (inputId == null) return;
+        if (btnInputs.getVisibility() != View.VISIBLE) btnInputs.setVisibility(View.VISIBLE);
+        // Three slow breaths, then still: enough to be seen across the room, not a blinking light.
+        if (animations && !reducedMotion) {
+            btnInputs.setAlpha(0.45f);
+            btnInputs.animate().alpha(1f).setDuration(700)
+                    .setInterpolator(new android.view.animation.CycleInterpolator(3f / 2f)).start();
+        }
+        handler.postDelayed(hdmiReadyEnd, 60_000);
+    }
+
+    /** Takes the state of every HDMI input as it is now, so a later change can be told apart from this one. */
+    private void snapshotHdmiStates() {
+        TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
+        if (tim == null) return;
+        for (TvInputInfo info : tim.getTvInputList()) {
+            if (info.isPassthroughInput() && info.getType() == TvInputInfo.TYPE_HDMI) {
+                hdmiStates.put(info.getId(), tim.getInputState(info.getId()));
+            }
+        }
+    }
+
     private void openInput(String inputId) {
         Uri uri = TvContract.buildChannelUriForPassthroughInput(inputId);
         Intent view = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "vnd.android.cursor.item/channel")

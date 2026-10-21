@@ -43,6 +43,9 @@ android {
 dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.dynamicanimation:dynamicanimation:1.0.0'
+    // Installs baseline-prof.txt when the APK is sideloaded, so ART compiles Home's code ahead of time instead of
+    // interpreting it on the first scrolls after every install.
+    implementation 'androidx.profileinstaller:profileinstaller:1.3.1'
     // Test only (never in the APK): plain JVM tests for the module card validators, src/test.
     testImplementation 'junit:junit:4.13.2'
 }

@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">Home</string>
     <string name="inputs">Inputs</string>
+    <!-- The Inputs pill for a minute after something is plugged in: "PC connected". -->
+    <string name="input_ready">%1$s connected</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Settings</string>
     <string name="choose_input">Inputs</string>

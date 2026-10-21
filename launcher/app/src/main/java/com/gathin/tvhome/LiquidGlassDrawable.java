@@ -39,7 +39,7 @@ final class LiquidGlassDrawable extends Drawable {
      * kept; a place not drawn yet shows the nearest one until its own is ready. Nothing is drawn off screen.
      */
     private static final int KEEP = 6;
-    private static final java.util.concurrent.ExecutorService RENDERER = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final java.util.concurrent.ExecutorService RENDERER = BackgroundThreads.single("glass");
     private final java.util.LinkedHashMap<Long, Bitmap> cache = new java.util.LinkedHashMap<Long, Bitmap>(8, 0.75f, true) {
         @Override protected boolean removeEldestEntry(java.util.Map.Entry<Long, Bitmap> eldest) { return size() > KEEP; }
     };
@@ -139,6 +139,7 @@ final class LiquidGlassDrawable extends Drawable {
                         return;
                     }
                     Bitmap done = render(rb, lx, ly, bd);
+                    done.prepareToDraw();   // its texture goes up before the frame that shows it
                     host.post(() -> {
                         pending.remove(key);
                         if (gen != generation) return;
