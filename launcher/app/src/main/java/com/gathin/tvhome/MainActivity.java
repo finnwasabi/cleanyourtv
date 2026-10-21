@@ -152,7 +152,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean showStats;
     /** The weather beside the date (Weather), when "weather" is on. */
     private boolean weatherOn;
-    private TextView weatherView;
+    private View weatherView;
+    private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
     private boolean shamsi;
     /** greeting_name: said after the greeting, which is shown in capitals. */
@@ -366,9 +367,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
         weatherOn = Weather.enabled(this);
         weatherView = findViewById(R.id.weather);
+        weatherTemp = findViewById(R.id.weatherTemp);
+        weatherCondition = findViewById(R.id.weatherCondition);
         if (weatherOn) {
-            weatherIcon = new WeatherIcon(Math.round(20 * density), 0xE6FFFFFF);
-            weatherView.setCompoundDrawablesRelative(weatherIcon, null, null, null);
+            weatherIcon = new WeatherIcon(Math.round(21 * density), 0xF2FFFFFF);
+            weatherTemp.setCompoundDrawablesRelative(weatherIcon, null, null, null);
             showWeather(Weather.cached(this));
         }
         vpnApp = cfg.vpnApp;
@@ -758,18 +761,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         });
     }
 
-    /**
-     * The glyph and "28°", as a lock screen widget shows it; the condition in words is read out by TalkBack only,
-     * since the line has no room for it beside a long date. Gone without an answer.
-     */
+    /** The glyph, "28°" and the condition above the date; gone without an answer. */
     private void showWeather(Weather.Now now) {
         if (now == null) {
             weatherView.setVisibility(View.GONE);
             return;
         }
         weatherIcon.setKind(Weather.kind(now.code, now.day));
-        weatherView.setText(now.temp + "°");
-        weatherView.setContentDescription(now.temp + "°, " + getString(Weather.label(now.code)));
+        weatherTemp.setText(now.temp + "°");
+        weatherCondition.setText(Weather.label(now.code));
         weatherView.setVisibility(View.VISIBLE);
     }
 

@@ -254,44 +254,60 @@
                             android:includeFontPadding="false"
                             android:visibility="gone" />
 
-                        <!-- The date, and the weather right after it when "weather" is on (Weather). -->
+                        <!-- The weather above the date when "weather" is on (Weather): glyph and temperature in the
+                             clock's light weight, then the condition in the date's small caps. -->
                         <LinearLayout
+                            android:id="@+id/weather"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:layout_marginBottom="7dp"
                             android:orientation="horizontal"
-                            android:baselineAligned="true">
+                            android:baselineAligned="true"
+                            android:visibility="gone">
 
-                            <TextClock
-                                android:id="@+id/date"
-                                android:gravity="left"
+                            <TextView
+                                android:id="@+id/weatherTemp"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:singleLine="@bool/date_single_line"
-                                android:maxLines="2"
-                                android:lineSpacingExtra="6dp"
+                                android:drawablePadding="8dp"
+                                android:singleLine="true"
+                                android:textColor="#F2FFFFFF"
+                                android:textSize="19sp"
+                                android:fontFamily="@font/outfit_regular"
+                                android:letterSpacing="0.01"
+                                android:includeFontPadding="false" />
+
+                            <TextView
+                                android:id="@+id/weatherCondition"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:singleLine="true"
                                 android:ellipsize="end"
-                                android:format12Hour="@string/date_format_home"
-                                android:format24Hour="@string/date_format_home"
                                 android:textColor="#A6FFFFFF"
                                 android:textSize="14sp"
                                 android:fontFamily="@font/outfit_regular"
                                 android:letterSpacing="0.14"
-                                android:textAllCaps="true" />
-
-                            <TextView
-                                android:id="@+id/weather"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="26dp"
-                                android:drawablePadding="8dp"
-                                android:singleLine="true"
-                                android:textColor="#E6FFFFFF"
-                                android:textSize="17sp"
-                                android:fontFamily="@font/outfit_regular"
-                                android:letterSpacing="0.02"
-                                android:focusable="false"
-                                android:visibility="gone" />
+                                android:textAllCaps="true"
+                                android:includeFontPadding="false" />
                         </LinearLayout>
+
+                        <TextClock
+                            android:id="@+id/date"
+                            android:gravity="left"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:singleLine="@bool/date_single_line"
+                            android:maxLines="2"
+                            android:lineSpacingExtra="6dp"
+                            android:ellipsize="end"
+                            android:format12Hour="@string/date_format_home"
+                            android:format24Hour="@string/date_format_home"
+                            android:textColor="#A6FFFFFF"
+                            android:textSize="14sp"
+                            android:fontFamily="@font/outfit_regular"
+                            android:letterSpacing="0.14"
+                            android:textAllCaps="true" />
                     </LinearLayout>
                 </LinearLayout>
 
