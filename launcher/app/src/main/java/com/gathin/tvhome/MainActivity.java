@@ -367,6 +367,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
+            /**
+             * Keep a screen of rows laid out above and below the visible ones. Back up from the bottom of the grid
+             * the channel rows had been recycled, so focusing one had to scroll to a position the layout manager could
+             * not see yet, and RecyclerView's seek scroll covered 250-300px in a single frame. Laid out, the row takes
+             * focus directly and requestChildRectangleOnScreen below glides to it like any tile.
+             */
+            @Override
+            protected void calculateExtraLayoutSpace(@NonNull RecyclerView.State state, @NonNull int[] extra) {
+                extra[0] = getHeight();
+                extra[1] = getHeight();
+            }
+
             @Override
             protected boolean isLayoutRTL() {
                 return rtlAppGrid;
@@ -398,7 +410,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 else dy = Math.min(top, bottom - limitBottom);
                 if (dy == 0) return false;
                 if (immediate || reducedMotion || !animations) parent.scrollBy(0, dy);
-                else parent.smoothScrollBy(0, dy);
+                else glide(parent, dy);
                 return true;
             }
         });
@@ -1151,7 +1163,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             boolean scroll = Math.abs(dy) > (int) (8 * density);
             if (scroll) {
                 if (!animations || reducedMotion) grid.scrollBy(0, dy);
-                else grid.smoothScrollBy(0, dy);
+                else glide(grid, dy);
             }
             showHero(position, scroll ? r.top - dy : r.top);
         } else {
@@ -1736,6 +1748,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     }
 
     // ---- channel rows (ChannelsAdapter.Host) -----------------------------------------------------
+
+    /** Ease in and out (0.4, 0, 0.2, 1): speeds up and slows down evenly where RecyclerView's quintic default lunges. */
+    private static final android.view.animation.Interpolator GLIDE =
+            new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f);
+
+    /**
+     * Vertical grid scroll with a duration that grows with the distance. RecyclerView's default covered the dock's
+     * 450px return trip in a few frames (up to 168px in one), which read as a jump.
+     */
+    private void glide(RecyclerView rv, int dy) {
+        int duration = Math.max(260, Math.min(540, 220 + (int) (Math.abs(dy) / density * 0.8f)));
+        rv.smoothScrollBy(0, dy, GLIDE, duration);
+    }
 
     @Override public int appPosition(int gridPosition) { return appPos(gridPosition); }
 

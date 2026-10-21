@@ -125,16 +125,43 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         if (index < 0 || index >= rows.size() || host == null) return;
         int col = column >= 0 ? Math.min(column, rows.get(index).programs.size() - 1) : columnFor(index);
         int position = host.channelStart() + index;
+        cancelPendingScroll();
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(position);
         if (vh instanceof RowHolder) {
             ((RowHolder) vh).focusColumn(col);
             return;
         }
-        grid.scrollToPosition(position);
-        grid.post(() -> {
-            RecyclerView.ViewHolder h = grid.findViewHolderForAdapterPosition(position);
-            if (h instanceof RowHolder) ((RowHolder) h).focusColumn(col);
-        });
+        // The row was scrolled out and recycled (back up from the bottom of the grid). Jumping to it with
+        // scrollToPosition snapped the whole screen; glide there like AppAdapter tiles do, then focus.
+        if (!animations) {
+            grid.scrollToPosition(position);
+            grid.post(() -> {
+                RecyclerView.ViewHolder h = grid.findViewHolderForAdapterPosition(position);
+                if (h instanceof RowHolder) ((RowHolder) h).focusColumn(col);
+            });
+            return;
+        }
+        pendingScroll = new RecyclerView.OnScrollListener() {
+            @Override public void onScrollStateChanged(@NonNull RecyclerView rv, int state) {
+                if (state != RecyclerView.SCROLL_STATE_IDLE) return;
+                rv.removeOnScrollListener(this);
+                if (pendingScroll != this) return;
+                pendingScroll = null;
+                RecyclerView.ViewHolder h = rv.findViewHolderForAdapterPosition(position);
+                if (h instanceof RowHolder) ((RowHolder) h).focusColumn(col);
+            }
+        };
+        grid.addOnScrollListener(pendingScroll);
+        grid.smoothScrollToPosition(position);
+    }
+
+    private RecyclerView.OnScrollListener pendingScroll;
+
+    private void cancelPendingScroll() {
+        if (pendingScroll != null) {
+            grid.removeOnScrollListener(pendingScroll);
+            pendingScroll = null;
+        }
     }
 
     private int columnFor(int index) {
