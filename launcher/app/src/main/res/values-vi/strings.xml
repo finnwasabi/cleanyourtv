@@ -86,4 +86,14 @@
     <string name="reorder">Sắp xếp ứng dụng</string>
     <string name="reorder_hint">OK để nhấc ứng dụng, phím mũi tên để di chuyển, Back để đặt xuống. Back lần nữa để xong.</string>
     <string name="reorder_not_saved">Không lưu được thứ tự mới</string>
+    <string name="weather_clear">Trời quang</string>
+    <string name="weather_mostly_clear">Ít mây</string>
+    <string name="weather_partly_cloudy">Mây rải rác</string>
+    <string name="weather_cloudy">Nhiều mây</string>
+    <string name="weather_fog">Sương mù</string>
+    <string name="weather_drizzle">Mưa phùn</string>
+    <string name="weather_light_rain">Mưa nhẹ</string>
+    <string name="weather_rain">Có mưa</string>
+    <string name="weather_heavy_rain">Mưa to</string>
+    <string name="weather_storm">Dông</string>
 </resources>
