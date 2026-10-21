@@ -4,4 +4,5 @@
     <item name="program_tag" type="id" />
     <item name="name_scroller" type="id" />
     <item name="name_gravity" type="id" />
+    <item name="pill_fade" type="id" />
 </resources>

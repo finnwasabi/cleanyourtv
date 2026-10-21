@@ -614,7 +614,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnNowPlaying = findViewById(R.id.btnNowPlaying);
         btnNowPlaying.setOnClickListener(v -> openPlaying());
         // Just the level bars until focused: spelled out, the pill took the room the date and the weather need.
-        btnNowPlaying.setOnFocusChangeListener((v, has) -> fillNowPlaying());
+        btnNowPlaying.setOnFocusChangeListener((v, has) -> {
+            fadePillText(v, has);
+            fillNowPlaying();
+        });
         // The level bars at 18dp, for the 32dp pill.
         android.graphics.drawable.Drawable bars = getDrawable(R.drawable.ic_now_playing);
         if (bars != null) {
@@ -690,12 +693,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
-        if (advancedEffects) {
-            for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnSettings}) {
-                button.setOnFocusChangeListener((view, focused) -> view.animate()
-                        .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
-                        .setDuration(160).start());
-            }
+        for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnSettings}) {
+            button.setOnFocusChangeListener((view, focused) -> {
+                if (!festive) fadePillText(view, focused);
+                if (advancedEffects) view.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
+                        .setDuration(160).start();
+            });
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
 
@@ -1020,6 +1023,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
         int pad = open ? Math.round(7 * density) : 0;
         if (btnNowPlaying.getCompoundDrawablePadding() != pad) btnNowPlaying.setCompoundDrawablePadding(pad);
+    }
+
+    /**
+     * A pill's text and glyph go from white to near black (and back) with its background's crossfade rather than at
+     * once: one short colour animation on the pill, nothing else redraws.
+     */
+    private void fadePillText(View v, boolean focused) {
+        if (!(v instanceof TextView)) return;
+        TextView t = (TextView) v;
+        int to = focused ? 0xFF111111 : 0xFFFFFFFF;
+        Object old = t.getTag(R.id.pill_fade);
+        if (old instanceof android.animation.ValueAnimator) ((android.animation.ValueAnimator) old).cancel();
+        int from = t.getCurrentTextColor();
+        if (!animations || from == to) {
+            t.setTextColor(to);
+            t.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(to));
+            return;
+        }
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(from, to);
+        a.setDuration(focused ? 170 : 230);
+        a.addUpdateListener(an -> {
+            int c = (int) an.getAnimatedValue();
+            t.setTextColor(c);
+            t.setCompoundDrawableTintList(android.content.res.ColorStateList.valueOf(c));
+        });
+        t.setTag(R.id.pill_fade, a);
+        a.start();
     }
 
     private CharSequence appLabel(String pkg) {
@@ -2098,6 +2128,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         states.addState(new int[]{android.R.attr.state_focused}, focused);
         states.addState(new int[]{android.R.attr.state_activated}, activated);
         states.addState(new int[]{}, new LiquidGlassDrawable(pill, r, density, 0x26FFFFFF));
+        // Glass to white and back as a crossfade, as pill_bg.xml does for the flat pills.
+        states.setEnterFadeDuration(170);
+        states.setExitFadeDuration(230);
         return states;
     }
 
