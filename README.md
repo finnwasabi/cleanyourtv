@@ -27,7 +27,7 @@
 
 The `wanbo-x7` branch adds poster rows for the preview channels apps publish ("Continue watching",
 YouTube recommendations) between the dock and the app grid, and a `liquid_glass` theme
-([`themes/liquid-glass/`](themes/liquid-glass/)), the weather above the date, a Watch Next row across apps (`@watch_next` in `channel_rows`), an Inputs pill that offers an HDMI source the moment it connects, a Now playing pill for what another app plays (needs `cmd notification allow_listener com.gathin.tvhome/com.gathin.tvhome.MediaListener 0` once), a quote of the day in place of the greeting (`greeting_quotes`), posters cached on disk, and long names that slide by once after a moment of focus. All are optional keys, documented in [`themes/`](themes/README.md#keys).
+([`themes/liquid-glass/`](themes/liquid-glass/)), the weather above the date, a Watch Next row across apps (`@watch_next` in `channel_rows`), an Inputs pill that offers an HDMI source the moment it connects, a Now playing pill while AirPlay audio plays (`audio_receivers`), a quote of the day in place of the greeting (`greeting_quotes`), posters cached on disk, and long names that slide by once after a moment of focus. All are optional keys, documented in [`themes/`](themes/README.md#keys).
 
 Measured on 21 October 2026 against Projectivy Launcher 4.71, the launcher it replaced. The TV is a
 Wanbo X7 Pro Max projector: Google TV 14, MediaTek MT9676, Mali-G52, 1.8 GB RAM, 32-bit userspace. The

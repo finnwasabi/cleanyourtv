@@ -4,8 +4,6 @@
     <string name="inputs">Inputs</string>
     <!-- The Inputs pill for a minute after something is plugged in: "PC connected". -->
     <string name="input_ready">%1$s connected</string>
-    <!-- Now playing pill, read out by TalkBack: "Song title, playing in YouTube". -->
-    <string name="now_playing">%1$s, playing in %2$s</string>
     <!-- Now playing pill when the app names no track (AirPlay audio): "Playing through AirPlay". -->
     <string name="playing_through">Playing through %1$s</string>
     <string name="wifi">Wi-Fi</string>

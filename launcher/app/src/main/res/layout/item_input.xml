@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- One row of the Inputs menu: the name large ("PC"), and under it the port and its state ("HDMI 1 · ● Connected").
+     The focused row's corners are the panel's minus its padding, so the white sits evenly inside the glass. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="42dp"
+    android:layout_height="wrap_content"
+    android:minHeight="46dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:paddingStart="12dp"
-    android:paddingEnd="12dp"
+    android:paddingEnd="14dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp"
     android:background="@drawable/input_row_bg"
     android:focusable="true"
     android:clickable="true">
@@ -18,33 +23,64 @@
         android:duplicateParentState="true"
         android:contentDescription="@null" />
 
-    <TextView
-        android:id="@+id/title"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="12dp"
-        android:textColor="@drawable/pill_text"
-        android:duplicateParentState="true"
-        android:textSize="15sp"
-        android:fontFamily="@font/bevietnam_medium"
-        android:singleLine="true" />
+        android:layout_marginStart="12dp"
+        android:orientation="vertical"
+        android:duplicateParentState="true">
 
-    <View
-        android:id="@+id/dot"
-        android:layout_width="7dp"
-        android:layout_height="7dp"
-        android:layout_marginEnd="8dp"
-        android:background="@drawable/status_dot" />
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@drawable/pill_text"
+            android:duplicateParentState="true"
+            android:textSize="15sp"
+            android:fontFamily="@font/bevietnam_medium"
+            android:includeFontPadding="false"
+            android:singleLine="true"
+            android:ellipsize="end" />
 
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:textColor="@drawable/pill_text_dim"
-        android:duplicateParentState="true"
-        android:textSize="11sp"
-        android:fontFamily="@font/bevietnam_regular"
-        android:letterSpacing="0.04" />
+        <LinearLayout
+            android:id="@+id/subRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:duplicateParentState="true">
+
+            <TextView
+                android:id="@+id/sub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@drawable/pill_text_dim"
+                android:duplicateParentState="true"
+                android:textSize="12sp"
+                android:fontFamily="@font/bevietnam_regular"
+                android:includeFontPadding="false"
+                android:singleLine="true" />
+
+            <View
+                android:id="@+id/dot"
+                android:layout_width="6dp"
+                android:layout_height="6dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="5dp"
+                android:background="@drawable/status_dot" />
+
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@drawable/pill_text_dim"
+                android:duplicateParentState="true"
+                android:textSize="12sp"
+                android:fontFamily="@font/bevietnam_regular"
+                android:includeFontPadding="false"
+                android:singleLine="true" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

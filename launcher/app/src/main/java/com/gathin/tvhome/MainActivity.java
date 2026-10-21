@@ -158,15 +158,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private EdgeFadeLayout gridFrame;
     /** The last focus was a channel card, so coming back to Home returns to it (ChannelsAdapter.focusLast). */
     private boolean channelFocused;
-    /** The Now playing pill and the session it shows (NowPlaying section below). */
+    /** The Now playing pill (AirPlay audio), see the now playing section. */
     private TextView btnNowPlaying;
-    private android.media.session.MediaController playing;
     private boolean sessionsListening;
-    /**
-     * A receiver app that plays without a session Home can see (AirPlay's keeps an inactive one with no metadata
-     * while it streams audio from a Mac): shown as "Playing through ..." while the system says music is playing and
-     * no session claims it. The first installed of audio_receivers in config.xml.
-     */
+    /** The AirPlay receiver the pill names and opens: the first installed of audio_receivers in config.xml. */
     private String quietPkg;
     /** What the Now playing pill says when focused; it shows only its glyph otherwise. */
     private CharSequence playingLabel = "";
@@ -894,110 +889,45 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     // ---- now playing ---------------------------------------------------------------------------
 
-    private final android.media.session.MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged =
-            this::pickPlaying;
-    private final android.media.session.MediaController.Callback playingCallback =
-            new android.media.session.MediaController.Callback() {
-                @Override public void onPlaybackStateChanged(android.media.session.PlaybackState state) { showPlaying(); }
-                @Override public void onMetadataChanged(android.media.MediaMetadata metadata) { showPlaying(); }
-                @Override public void onSessionDestroyed() { pickPlaying(null); }
-            };
-
     /**
-     * Listens to other apps' media sessions while Home is in front, so the pill can say what is playing (a cast from
-     * the phone, AirPlay, music left running). Needs MediaListener allowed once over adb; without it, nothing shows.
+     * Only AirPlay plays on while Home is in front (other apps stop or pause when left), and its receiver tells
+     * Android nothing about what it plays, so the pill shows while the system says music is playing and an AirPlay
+     * receiver (audio_receivers) is installed. Android calls back on every player start and stop; nothing polls.
      */
     private void listenSessions(boolean on) {
-        android.media.session.MediaSessionManager msm = getSystemService(android.media.session.MediaSessionManager.class);
-        if (msm == null) return;
-        ComponentName me = new ComponentName(this, MediaListener.class);
-        try {
-            if (on && !sessionsListening) {
-                msm.addOnActiveSessionsChangedListener(sessionsChanged, me, handler);
-                sessionsListening = true;
-                android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
-                if (am != null) am.registerAudioPlaybackCallback(audioChanged, handler);
-                pickPlaying(msm.getActiveSessions(me));
-            } else if (!on && sessionsListening) {
-                msm.removeOnActiveSessionsChangedListener(sessionsChanged);
-                sessionsListening = false;
-                android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
-                if (am != null) am.unregisterAudioPlaybackCallback(audioChanged);
-                if (playing != null) playing.unregisterCallback(playingCallback);
-                playing = null;
+        android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+        if (am == null) return;
+        if (on && !sessionsListening) {
+            quietPkg = null;
+            for (String r : getResources().getStringArray(R.array.audio_receivers)) {
+                if (getPackageManager().getLaunchIntentForPackage(r) != null
+                        || getPackageManager().getLeanbackLaunchIntentForPackage(r) != null) {
+                    quietPkg = r;
+                    break;
+                }
             }
-        } catch (SecurityException e) {
-            sessionsListening = false;   // the listener is not allowed: no pill
+            if (quietPkg == null) return;   // no receiver installed: nothing to listen for
+            am.registerAudioPlaybackCallback(audioChanged, handler);
+            sessionsListening = true;
+            showPlaying();
+        } else if (!on && sessionsListening) {
+            am.unregisterAudioPlaybackCallback(audioChanged);
+            handler.removeCallbacks(recheckPlaying);
+            sessionsListening = false;
         }
-    }
-
-    /** The session to show: one playing, else one paused; never this launcher's own. */
-    private void pickPlaying(List<android.media.session.MediaController> sessions) {
-        if (sessions == null) {
-            android.media.session.MediaSessionManager msm = getSystemService(android.media.session.MediaSessionManager.class);
-            try {
-                sessions = msm == null ? null : msm.getActiveSessions(new ComponentName(this, MediaListener.class));
-            } catch (SecurityException e) {
-                sessions = null;
-            }
-        }
-        android.media.session.MediaController best = null;
-        quietPkg = null;
-        for (String r : getResources().getStringArray(R.array.audio_receivers)) {
-            if (getPackageManager().getLaunchIntentForPackage(r) != null
-                    || getPackageManager().getLeanbackLaunchIntentForPackage(r) != null) {
-                quietPkg = r;
-                break;
-            }
-        }
-        if (sessions != null) {
-            for (android.media.session.MediaController c : sessions) {
-                if (getPackageName().equals(c.getPackageName())) continue;
-                int st = c.getPlaybackState() == null ? 0 : c.getPlaybackState().getState();
-                if (st == android.media.session.PlaybackState.STATE_PLAYING) { best = c; break; }
-                if (st == android.media.session.PlaybackState.STATE_PAUSED && best == null) best = c;
-            }
-        }
-        if (playing != null && (best == null || !playing.getSessionToken().equals(best.getSessionToken()))) {
-            playing.unregisterCallback(playingCallback);
-            playing = null;
-        }
-        if (best != null && playing == null) {
-            playing = best;
-            playing.registerCallback(playingCallback, handler);
-        }
-        showPlaying();
     }
 
     private void showPlaying() {
-        android.media.session.PlaybackState ps = playing == null ? null : playing.getPlaybackState();
-        int st = ps == null ? 0 : ps.getState();
-        android.media.MediaMetadata md = playing == null ? null : playing.getMetadata();
-        CharSequence title = md == null ? null : md.getText(android.media.MediaMetadata.METADATA_KEY_DISPLAY_TITLE);
-        if (title == null && md != null) title = md.getText(android.media.MediaMetadata.METADATA_KEY_TITLE);
-        boolean show = title != null && title.length() > 0
-                && (st == android.media.session.PlaybackState.STATE_PLAYING || st == android.media.session.PlaybackState.STATE_PAUSED);
-        if (!show) {
-            // Music playing that no session names (AirPlay audio from a Mac): say through which app.
-            android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
-            if (quietPkg != null && st != android.media.session.PlaybackState.STATE_PLAYING
-                    && am != null && am.isMusicActive()) {
-                playingLabel = getString(R.string.playing_through, appLabel(quietPkg));
-                btnNowPlaying.setAlpha(1f);
-                btnNowPlaying.setContentDescription(playingLabel);
-                fillNowPlaying();
-                btnNowPlaying.setVisibility(View.VISIBLE);
-                return;
-            }
-            if (btnNowPlaying.hasFocus()) findViewById(R.id.btnSettings).requestFocus();
-            btnNowPlaying.setVisibility(View.GONE);
+        android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+        if (quietPkg != null && am != null && am.isMusicActive()) {
+            playingLabel = getString(R.string.playing_through, appLabel(quietPkg));
+            btnNowPlaying.setContentDescription(playingLabel);
+            fillNowPlaying();
+            btnNowPlaying.setVisibility(View.VISIBLE);
             return;
         }
-        playingLabel = title;
-        fillNowPlaying();
-        btnNowPlaying.setAlpha(st == android.media.session.PlaybackState.STATE_PAUSED ? 0.7f : 1f);
-        btnNowPlaying.setContentDescription(getString(R.string.now_playing, title, appLabel(playing.getPackageName())));
-        btnNowPlaying.setVisibility(View.VISIBLE);
+        if (btnNowPlaying.hasFocus()) findViewById(R.id.btnSettings).requestFocus();
+        btnNowPlaying.setVisibility(View.GONE);
     }
 
     /** The pill's text: the label while focused, nothing (only the glyph, evenly padded) otherwise. */
@@ -1060,29 +990,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
     }
 
-    /** Back to what is playing: the session's own screen, else the app. */
+    /** Opens the AirPlay receiver the pill names. */
     private void openPlaying() {
-        if (playing == null && quietPkg != null) {
-            Intent q = getPackageManager().getLeanbackLaunchIntentForPackage(quietPkg);
-            if (q == null) q = getPackageManager().getLaunchIntentForPackage(quietPkg);
-            if (q != null) open(q.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            return;
-        }
-        if (playing == null) return;
-        android.app.PendingIntent pi = playing.getSessionActivity();
-        if (pi != null) {
-            try {
-                android.app.ActivityOptions o = android.app.ActivityOptions.makeBasic();
-                if (Build.VERSION.SDK_INT >= 34) {
-                    o.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
-                }
-                pi.send(this, 0, null, null, null, null, o.toBundle());
-                return;
-            } catch (Exception ignored) { }
-        }
-        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(playing.getPackageName());
-        if (i == null) i = getPackageManager().getLaunchIntentForPackage(playing.getPackageName());
-        if (i != null) open(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        if (quietPkg == null) return;
+        Intent q = getPackageManager().getLeanbackLaunchIntentForPackage(quietPkg);
+        if (q == null) q = getPackageManager().getLaunchIntentForPackage(quietPkg);
+        if (q != null) open(q.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     }
 
     /** The glyph, "28°" and the condition above the date; gone without an answer. */
@@ -2741,8 +2654,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         if (liquidGlass) panel.setBackground(new LiquidGlassDrawable(panel, 20 * density, density, 0xB3141418));
         LinearLayout rows = panel.findViewById(R.id.rows);
 
-        // Compact: as wide as the Inputs pill (a touch wider so "HDMI 1" fits), hanging right below it.
-        int width = Math.max(anchor.getWidth(), (int) (150 * density));
+        // Compact: as wide as the Inputs pill, or room for a name over its port, hanging right below it.
+        int width = Math.max(anchor.getWidth(), (int) (190 * density));
         final PopupWindow popup = glassPopup(panel, width);
 
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -2911,7 +2824,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private void addInputRow(LinearLayout rows, PopupWindow popup, int iconRes, String title, int state, Runnable action) {
         View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
         ((ImageView) row.findViewById(R.id.icon)).setImageResource(iconRes);
-        ((TextView) row.findViewById(R.id.title)).setText(title);
+        // "PC · HDMI 1": the name on its own line, the port under it with the state.
+        TextView sub = row.findViewById(R.id.sub);
+        int cut = title.indexOf(" \u00B7 ");
+        String main = sub != null && cut > 0 ? title.substring(0, cut) : title;
+        String port = sub != null && cut > 0 ? title.substring(cut + 3) : "";
+        ((TextView) row.findViewById(R.id.title)).setText(main);
+        if (sub != null) sub.setText(port);
         TextView status = row.findViewById(R.id.status);
         View dot = row.findViewById(R.id.dot);
         // This TV reports "standby" for every port whether or not something is plugged in, so only
@@ -2925,6 +2844,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         } else {
             status.setVisibility(View.GONE);
             dot.setVisibility(View.GONE);
+        }
+        if (sub != null && port.isEmpty()) {
+            // No port line: the state sits right under the name, or the row is the name alone.
+            if (status.getVisibility() == View.GONE) row.findViewById(R.id.subRow).setVisibility(View.GONE);
+            else ((ViewGroup.MarginLayoutParams) dot.getLayoutParams()).setMarginStart(0);
         }
         row.setOnClickListener(v -> {
             popup.dismiss();

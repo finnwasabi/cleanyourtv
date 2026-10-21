@@ -72,8 +72,8 @@ final class WallpaperPlayer {
         while (first != null) {
             Bitmap bitmap = decode(first);
             if (bitmap != null) {
-                image.setImageBitmap(bitmap);
                 Backdrop.set(bitmap, width, height);
+                image.setImageBitmap(onGpu(bitmap));
                 displayed = first.getName();
                 if (!displayed.equals(previous)) {
                     preferences.edit().putString("image", displayed)
@@ -126,8 +126,8 @@ final class WallpaperPlayer {
                     update();
                     return;
                 }
-                image.setImageBitmap(bitmap);
                 Backdrop.set(bitmap, width, height);
+                image.setImageBitmap(onGpu(bitmap));
                 displayed = next.getName();
                 if (!displayed.equals(previous) || changed == 0) {
                     preferences.edit().putString("image", displayed)
@@ -135,6 +135,21 @@ final class WallpaperPlayer {
                 }
             });
         });
+    }
+
+    /**
+     * The picture as a hardware bitmap, once Backdrop has taken its blurred copy: the pixels then live only in
+     * graphics memory, instead of once in the app's heap and again as the texture drawn (about 4 MB at 1080p).
+     */
+    private static Bitmap onGpu(Bitmap b) {
+        try {
+            Bitmap hw = b.copy(Bitmap.Config.HARDWARE, false);
+            if (hw == null) return b;
+            b.recycle();
+            return hw;
+        } catch (Exception e) {
+            return b;
+        }
     }
 
     private Bitmap decode(File file) {
