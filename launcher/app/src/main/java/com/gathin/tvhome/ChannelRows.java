@@ -214,16 +214,18 @@ final class ChannelRows {
         }
         if (rows.isEmpty()) return rows;
         if (byId.isEmpty()) return rows;   // the Watch Next row alone
+        Map<Long, Integer> weights = new HashMap<>();
 
         try (Cursor c = ctx.getContentResolver().query(PROGRAMS,
                 new String[]{"_id", "channel_id", "title", "episode_title", "season_display_number",
                         "episode_display_number", "poster_art_uri", "thumbnail_uri", "poster_art_aspect_ratio",
-                        "intent_uri", "last_playback_position_millis", "duration_millis", "browsable"},
+                        "intent_uri", "last_playback_position_millis", "duration_millis", "browsable", "weight"},
                 null, null, null)) {
             if (c != null) {
                 while (c.moveToNext()) {
                     Row row = byId.get(c.getLong(1));
-                    if (row == null || row.programs.size() >= MAX_PROGRAMS || c.getInt(12) == 0) continue;
+                    if (row == null || c.getInt(12) == 0) continue;
+                    weights.put(c.getLong(0), c.isNull(13) ? 0 : c.getInt(13));
                     String poster = c.getString(6);
                     if (poster == null || poster.isEmpty()) poster = c.getString(7);
                     String season = c.getString(4), episode = c.getString(5), episodeTitle = c.getString(3);
@@ -244,6 +246,13 @@ final class ChannelRows {
         // only while Watch Next is empty, never twice.
         String wnName = null;
         for (Row row : rows) if (row.id == WATCH_NEXT_ID) wnName = row.name;
+        // The publisher's own order: a larger weight is more important (TvContract.PreviewPrograms.COLUMN_WEIGHT),
+        // as the stock home screen shows them. Stable, so programs without a weight keep the provider's order.
+        for (Row row : rows) {
+            if (row.id == WATCH_NEXT_ID) continue;
+            Collections.sort(row.programs, (a, b) -> Integer.compare(weights.getOrDefault(b.id, 0), weights.getOrDefault(a.id, 0)));
+            while (row.programs.size() > MAX_PROGRAMS) row.programs.remove(row.programs.size() - 1);
+        }
         List<Row> out = new ArrayList<>();
         for (Row row : rows) {
             if (row.programs.isEmpty()) continue;

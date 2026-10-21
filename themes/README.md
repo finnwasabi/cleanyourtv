@@ -74,9 +74,10 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 
 ## Wallpapers
 
-`wallpaper.jpg` is drawn full screen behind the launcher, centre-cropped. Keep it dark, 1920×1080 and
-under about 300 KB: the text, the hero name and the dock band are designed for black, and a 1 GB TV
-decodes the picture into memory on every Home start. Pictures larger than the screen are scaled down to
+`wallpaper.jpg` is drawn full screen behind the launcher, centre-cropped. Keep it dark, 1920×1080, a baseline
+(not progressive) JPEG and under about 300 KB: the text, the hero name and the dock band are designed for black, and a 1 GB TV
+decodes the picture into memory on every Home start. (This fork decodes an eighth-size copy first for the first
+frame; a progressive JPEG cannot be decoded small quickly, which cost 110 ms of every cold start on a Wanbo X7.) Pictures larger than the screen are scaled down to
 it; a picture that is still over 4K (about 8.4 million pixels) after it is sampled down to the screen is not shown at all, and the plain colour stays.
 
 For a wallpaper collection, place JPEG, PNG or WebP files in the theme’s `wallpapers/` folder beside `config.json`, then set:

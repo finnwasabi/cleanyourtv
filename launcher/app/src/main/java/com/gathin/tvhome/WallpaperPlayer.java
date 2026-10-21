@@ -61,28 +61,72 @@ final class WallpaperPlayer {
     }
 
     /**
-     * The picture Home opens with is decoded right here, on the main thread, as the single wallpaper always was:
-     * Home's first frame already has it instead of drawing the plain colour and the picture popping in later.
-     * Only the later changes of a rotation decode in the background.
+     * The picture Home opens with, as a blur-up: an eighth-size decode right here on the main thread (a JPEG
+     * decodes at 1/8 in a few ms by scaling its DCT, against 155-164 ms for the full 1920x1080 on the MT9676), which
+     * is both Backdrop's source and a soft stand-in for Home's first frame; the full picture decodes and goes up
+     * to the GPU in the background and fades in over it. That took about 190 ms off the main thread before the
+     * first frame.
      */
     private void showFirst() {
         String previous = preferences.getString("image", "");
         File first = WallpaperRotation.find(files, previous);
         if (first == null) first = WallpaperRotation.pick(files, previous, random);
         while (first != null) {
-            Bitmap bitmap = decode(first);
-            if (bitmap != null) {
-                Backdrop.set(bitmap, width, height);
-                image.setImageBitmap(onGpu(bitmap));
+            Bitmap small = decodeSmall(first);
+            if (small != null) {
+                Backdrop.set(small, width, height);
+                image.setImageBitmap(small);
+                // The picture covers the whole screen (centre-cropped, opaque): the root's plain colour under it
+                // was a full-screen layer drawn for nothing every frame.
+                root.setBackground(null);
                 displayed = first.getName();
                 if (!displayed.equals(previous)) {
                     preferences.edit().putString("image", displayed)
                             .putLong("changed", System.currentTimeMillis()).apply();
                 }
+                File sharp = first;
+                loading = true;
+                decoder.execute(() -> {
+                    Bitmap full = decode(sharp);
+                    Bitmap shown = full == null ? null : onGpu(full);
+                    root.post(() -> {
+                        loading = false;
+                        if (closed || shown == null || !sharp.getName().equals(displayed)) return;
+                        android.graphics.drawable.TransitionDrawable fade = new android.graphics.drawable.TransitionDrawable(
+                                new android.graphics.drawable.Drawable[]{
+                                        new android.graphics.drawable.BitmapDrawable(root.getResources(), small),
+                                        new android.graphics.drawable.BitmapDrawable(root.getResources(), shown)});
+                        fade.setCrossFadeEnabled(false);   // the sharp picture over the soft one; both are opaque
+                        image.setImageDrawable(fade);
+                        fade.startTransition(250);
+                        // Then the sharp one alone, so the stand-in is not drawn under it every frame.
+                        root.postDelayed(() -> {
+                            if (image.getDrawable() == fade) image.setImageBitmap(shown);
+                        }, 300);
+                    });
+                });
                 return;
             }
             files.remove(first);   // unreadable or over 4K: try another, or keep the plain colour
             first = WallpaperRotation.pick(files, previous, random);
+        }
+    }
+
+    /** An eighth of the screen's size, for Backdrop and the first frame; null when the file is unreadable. */
+    private Bitmap decodeSmall(File file) {
+        try {
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(file.getPath(), options);
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null;
+            int sample = WallpaperSize.sampleSize(options.outWidth, options.outHeight, this.width, this.height);
+            if (!WallpaperSize.accepted(options.outWidth / sample, options.outHeight / sample)) return null;
+            options.inJustDecodeBounds = false;
+            options.inSampleSize = sample * 8;
+            options.inPreferredConfig = Bitmap.Config.RGB_565;
+            return BitmapFactory.decodeFile(file.getPath(), options);
+        } catch (Exception | OutOfMemoryError failure) {
+            return null;
         }
     }
 
@@ -113,7 +157,12 @@ final class WallpaperPlayer {
         File next = selected;
         loading = true;
         decoder.execute(() -> {
-            Bitmap bitmap = decode(next);
+            Bitmap decoded = decode(next);
+            // Backdrop's source taken while the pixels can be read, at the eighth size it blurs at anyway; the
+            // picture itself then goes up to the GPU. Backdrop.set redraws views, so it runs on the main thread.
+            Bitmap small = decoded == null ? null
+                    : Bitmap.createScaledBitmap(decoded, Math.max(1, width / 8), Math.max(1, height / 8), true);
+            Bitmap bitmap = decoded == null ? null : onGpu(decoded);
             root.post(() -> {
                 loading = false;
                 if (closed || !active) {
@@ -126,8 +175,8 @@ final class WallpaperPlayer {
                     update();
                     return;
                 }
-                Backdrop.set(bitmap, width, height);
-                image.setImageBitmap(onGpu(bitmap));
+                Backdrop.set(small, width, height);
+                image.setImageBitmap(bitmap);
                 displayed = next.getName();
                 if (!displayed.equals(previous) || changed == 0) {
                     preferences.edit().putString("image", displayed)

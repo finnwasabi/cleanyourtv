@@ -214,7 +214,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
 
     private RecyclerView.OnScrollListener pendingScroll;
 
-    private void cancelPendingScroll() {
+    void cancelPendingScroll() {
         if (pendingScroll != null) {
             grid.removeOnScrollListener(pendingScroll);
             pendingScroll = null;
