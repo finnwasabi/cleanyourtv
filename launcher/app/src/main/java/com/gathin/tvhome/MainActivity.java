@@ -686,6 +686,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         grid.scrollToPosition(0);
         lastFocused = 0;
+        // Home goes to the first dock tile, also from a channel card: left set, the card took focus back, then the
+        // jump to the top moved it out from under the glass.
+        channelFocused = false;
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
         rebuildOnResume = true;
     }
@@ -1399,7 +1402,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
     private void refitGlass() {
-        if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
+        if (isDestroyed()) return;
+        // A channel card: put the glass back on it wherever the layout moved it.
+        View f = getCurrentFocus();
+        if (f != null && f.getTag(R.id.program_tag) != null) {
+            if (f.getWidth() > 0) moveGlassTo(f, false);
+            return;
+        }
+        if (adapter.appCount() == 0 || libraryFocusPending) return;
         int pos = Math.max(0, Math.min(lastFocused, adapter.appCount() - 1));
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(gridPos(pos));
         View card = vh == null ? null : vh.itemView.findViewById(R.id.card);
