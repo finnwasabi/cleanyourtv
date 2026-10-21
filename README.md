@@ -23,6 +23,29 @@
 > [@gathint, 17 October 2026](https://x.com/gathint/status/2111379569030939102). The replies are where
 > most of the TV lists here came from. The repo was called tv-vibehack until the 19th; old links work.
 
+## This fork: channel rows and liquid glass on a Wanbo X7 Pro Max
+
+The `wanbo-x7` branch adds poster rows for the preview channels apps publish ("Continue watching",
+YouTube recommendations) between the dock and the app grid, and a `liquid_glass` theme
+([`themes/liquid-glass/`](themes/liquid-glass/)). Both are optional keys, documented in [`themes/`](themes/README.md#keys).
+
+Measured on 21 October 2026 against Projectivy Launcher 4.71, the launcher it replaced. The TV is a
+Wanbo X7 Pro Max projector: Google TV 14, MediaTek MT9676, Mali-G52, 1.8 GB RAM, 32-bit userspace. The
+route is the same 30 key presses for each launcher (Right 4, Left 4, Down, Up, three times, 0.35 s
+apart) after a minute idle on Home, read with `dumpsys gfxinfo`, `dumpsys meminfo` and `top`.
+
+| | Projectivy, Overflight video wallpaper | Projectivy, static wallpaper | This fork, channel rows + liquid glass |
+|---|---|---|---|
+| Janky frames | 3.29% | 1.99% | **0.81%** |
+| 90th percentile frame | 38 ms | 29 ms | **30 ms** |
+| 99th percentile frame | 57 ms | 29 ms | **31 ms** |
+| Slow UI thread frames | 19 | 3 | **0** |
+| Launcher memory (PSS) | 122.4 MB | 87.4 MB | **72.5 MB** |
+| Idle CPU left (of 400%) | 100% | 294% | **373%** |
+
+Projectivy's memory leaves out the separate Overflight process. The stock CleanYourTV launcher on the
+same route, without channel rows or glass: 0.69% janky, 27 ms at the 99th percentile, 46.8 MB.
+
 ## How it works
 
 Android TVs have the same debug bridge as Android phones. Switch on USB debugging in the TV's
