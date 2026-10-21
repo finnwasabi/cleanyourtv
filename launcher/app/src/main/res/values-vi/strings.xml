@@ -4,6 +4,7 @@
     <string name="inputs">Nguồn vào</string>
     <string name="input_ready">%1$s đã kết nối</string>
     <string name="now_playing">%1$s, đang phát trên %2$s</string>
+    <string name="playing_through">Đang phát qua %1$s</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Cài đặt</string>
     <string name="choose_input">Nguồn vào</string>

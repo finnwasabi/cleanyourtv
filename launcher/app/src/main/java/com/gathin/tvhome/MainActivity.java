@@ -162,6 +162,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private TextView btnNowPlaying;
     private android.media.session.MediaController playing;
     private boolean sessionsListening;
+    /**
+     * A receiver app that plays without a session Home can see (AirPlay's keeps an inactive one with no metadata
+     * while it streams audio from a Mac): shown as "Playing through ..." while the system says music is playing and
+     * no session claims it. The first installed of audio_receivers in config.xml.
+     */
+    private String quietPkg;
+    /** What the Now playing pill says when focused; it shows only its glyph otherwise. */
+    private CharSequence playingLabel = "";
+    private final android.media.AudioManager.AudioPlaybackCallback audioChanged =
+            new android.media.AudioManager.AudioPlaybackCallback() {
+                @Override public void onPlaybackConfigChanged(List<android.media.AudioPlaybackConfiguration> configs) {
+                    showPlaying();
+                }
+            };
+    /** When the channel rows were last read; Home open for long reads them again every CHANNELS_REFRESH_MS. */
+    private long channelsReadAt;
+    private static final long CHANNELS_REFRESH_MS = 15 * 60 * 1000L;
     private View weatherView;
     private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
@@ -309,6 +326,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
+            // Home left open for long: read the channel rows again now and then (one provider query; the rows
+            // only rebuild when something in them changed).
+            if (channels != null && System.currentTimeMillis() - channelsReadAt >= CHANNELS_REFRESH_MS) {
+                channels.refresh();
+                channelsReadAt = System.currentTimeMillis();
+            }
             if (weatherOn) {
                 showWeather(Weather.cached(MainActivity.this));   // hides an answer gone stale
                 Weather.refresh(MainActivity.this, handler, MainActivity.this::showWeather);
@@ -580,6 +603,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnInputs = findViewById(R.id.btnInputs);
         btnNowPlaying = findViewById(R.id.btnNowPlaying);
         btnNowPlaying.setOnClickListener(v -> openPlaying());
+        // Just the level bars until focused: spelled out, the pill took the room the date and the weather need.
+        btnNowPlaying.setOnFocusChangeListener((v, has) -> fillNowPlaying());
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> {
             // Something was just plugged in: the pill offers it, one press switches to it.
@@ -709,7 +734,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     @Override
     protected void onResume() {
         super.onResume();
-        if (channels != null) channels.refresh();
+        if (channels != null) {
+            channels.refresh();
+            channelsReadAt = System.currentTimeMillis();
+        }
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
             recreate();
@@ -850,10 +878,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             if (on && !sessionsListening) {
                 msm.addOnActiveSessionsChangedListener(sessionsChanged, me, handler);
                 sessionsListening = true;
+                android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+                if (am != null) am.registerAudioPlaybackCallback(audioChanged, handler);
                 pickPlaying(msm.getActiveSessions(me));
             } else if (!on && sessionsListening) {
                 msm.removeOnActiveSessionsChangedListener(sessionsChanged);
                 sessionsListening = false;
+                android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+                if (am != null) am.unregisterAudioPlaybackCallback(audioChanged);
                 if (playing != null) playing.unregisterCallback(playingCallback);
                 playing = null;
             }
@@ -873,6 +905,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             }
         }
         android.media.session.MediaController best = null;
+        quietPkg = null;
+        for (String r : getResources().getStringArray(R.array.audio_receivers)) {
+            if (getPackageManager().getLaunchIntentForPackage(r) != null
+                    || getPackageManager().getLeanbackLaunchIntentForPackage(r) != null) {
+                quietPkg = r;
+                break;
+            }
+        }
         if (sessions != null) {
             for (android.media.session.MediaController c : sessions) {
                 if (getPackageName().equals(c.getPackageName())) continue;
@@ -901,24 +941,65 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         boolean show = title != null && title.length() > 0
                 && (st == android.media.session.PlaybackState.STATE_PLAYING || st == android.media.session.PlaybackState.STATE_PAUSED);
         if (!show) {
+            // Music playing that no session names (AirPlay audio from a Mac): say through which app.
+            android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+            if (quietPkg != null && st != android.media.session.PlaybackState.STATE_PLAYING
+                    && am != null && am.isMusicActive()) {
+                playingLabel = getString(R.string.playing_through, appLabel(quietPkg));
+                btnNowPlaying.setAlpha(1f);
+                btnNowPlaying.setContentDescription(playingLabel);
+                fillNowPlaying();
+                btnNowPlaying.setVisibility(View.VISIBLE);
+                return;
+            }
             if (btnNowPlaying.hasFocus()) btnInputs.requestFocus();
             btnNowPlaying.setVisibility(View.GONE);
             return;
         }
-        btnNowPlaying.setText(title);
+        playingLabel = title;
+        fillNowPlaying();
         btnNowPlaying.setAlpha(st == android.media.session.PlaybackState.STATE_PAUSED ? 0.7f : 1f);
-        CharSequence app;
-        try {
-            app = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(playing.getPackageName(), 0));
-        } catch (Exception e) {
-            app = playing.getPackageName();
-        }
-        btnNowPlaying.setContentDescription(getString(R.string.now_playing, title, app));
+        btnNowPlaying.setContentDescription(getString(R.string.now_playing, title, appLabel(playing.getPackageName())));
         btnNowPlaying.setVisibility(View.VISIBLE);
+    }
+
+    /** The pill's text: the label while focused, nothing (only the glyph, evenly padded) otherwise. */
+    private void fillNowPlaying() {
+        boolean open = btnNowPlaying.hasFocus();
+        CharSequence want = open ? playingLabel : "";
+        if (!want.toString().contentEquals(btnNowPlaying.getText())) {
+            // Open and close it as a reveal: the pill's bounds grow (the text uncovered from the start as its clip
+            // widens) and the pills beside it slide over. Bounds and clip only, no layout pass per frame.
+            if (animations && btnNowPlaying.getVisibility() == View.VISIBLE && btnNowPlaying.isLaidOut()) {
+                android.transition.ChangeBounds grow = new android.transition.ChangeBounds();
+                grow.setResizeClip(true);
+                grow.setDuration(reducedMotion ? 120 : 260);
+                grow.setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f));
+                // The header only (the pills and the clock block beside them): the grid never takes part.
+                android.transition.TransitionManager.beginDelayedTransition((ViewGroup) btnNowPlaying.getParent().getParent(), grow);
+            }
+            btnNowPlaying.setText(want);
+        }
+        int pad = open ? Math.round(8 * density) : 0;
+        if (btnNowPlaying.getCompoundDrawablePadding() != pad) btnNowPlaying.setCompoundDrawablePadding(pad);
+    }
+
+    private CharSequence appLabel(String pkg) {
+        try {
+            return getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0));
+        } catch (Exception e) {
+            return pkg;
+        }
     }
 
     /** Back to what is playing: the session's own screen, else the app. */
     private void openPlaying() {
+        if (playing == null && quietPkg != null) {
+            Intent q = getPackageManager().getLeanbackLaunchIntentForPackage(quietPkg);
+            if (q == null) q = getPackageManager().getLaunchIntentForPackage(quietPkg);
+            if (q != null) open(q.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return;
+        }
         if (playing == null) return;
         android.app.PendingIntent pi = playing.getSessionActivity();
         if (pi != null) {
@@ -1414,13 +1495,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(gridPos(pos));
         View card = vh == null ? null : vh.itemView.findViewById(R.id.card);
         if (card == null || card.getWidth() <= 0 || !card.isFocused()) return;
-        float pad = 6f * density;
-        float scale = adapter.focusScale();
-        int w = (int) (card.getWidth() * scale + 2 * pad);
-        int h = (int) (card.getHeight() * scale + 2 * pad);
-        if (!glassShown || card.getWidth() != glassCardW || glass.getWidth() != w || glass.getHeight() != h) {
-            onTileFocused(pos, card);
-        }
+        // Size or place: a header that grew (the Now playing pill, a two-line date) moves the grid under a glass
+        // that stays put, so refit on any layout, not only on a new size. onTileFocused also parks the dock again,
+        // and scrolls only when the dock is really off its line.
+        onTileFocused(pos, card);
     }
 
     // ---- top shelf -------------------------------------------------------------------------------

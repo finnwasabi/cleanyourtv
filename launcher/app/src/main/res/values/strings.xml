@@ -6,6 +6,8 @@
     <string name="input_ready">%1$s connected</string>
     <!-- Now playing pill, read out by TalkBack: "Song title, playing in YouTube". -->
     <string name="now_playing">%1$s, playing in %2$s</string>
+    <!-- Now playing pill when the app names no track (AirPlay audio): "Playing through AirPlay". -->
+    <string name="playing_through">Playing through %1$s</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Settings</string>
     <string name="choose_input">Inputs</string>
