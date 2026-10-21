@@ -1,4 +1,3 @@
-# Shrink and optimise, but keep class and method names: the size win comes from dropping unused
-# AndroidX code, not from renaming, and readable stack traces matter more in a sideloaded app
-# where crash reports arrive as screenshots.
--dontobfuscate
+# This fork renames too: R8 lays the DEX out in startup order only for an obfuscated build (with
+# android.experimental.r8.dex-startup-optimization), and short names make the APK smaller. Stack traces
+# are read back with the build's mapping.txt, kept next to each APK.
