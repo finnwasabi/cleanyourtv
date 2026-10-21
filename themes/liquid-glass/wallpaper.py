@@ -14,7 +14,6 @@ def hexc(h): return np.array([int(h[i:i+2], 16) / 255 for i in (1, 3, 5)], np.fl
 def blur(a, r):
     if a.ndim == 3: return np.stack([blur(a[..., i], r) for i in range(3)], -1)
     m = a.max() or 1
-    im = Image.fromarray(np.clip(a / m * 65535, 0, 65535).astype(np.uint16))
     im = Image.fromarray(np.clip(a / m * 255, 0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(r))
     return np.asarray(im, np.float32) / 255 * m
 
