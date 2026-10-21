@@ -586,6 +586,11 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         if (c != null) return c;
         android.graphics.drawable.Drawable d = h.poster.getDrawable();
         if (d == null || h.poster.getVisibility() != View.VISIBLE) return 0;
+        // A hardware poster cannot be read back; its colour was worked out when it was decoded.
+        if (d instanceof android.graphics.drawable.BitmapDrawable) {
+            Bitmap pb = ((android.graphics.drawable.BitmapDrawable) d).getBitmap();
+            if (pb != null && pb.getConfig() == Bitmap.Config.HARDWARE) return 0;
+        }
         int v = AppAdapter.vividColor(d);
         if (colors.size() > 200) colors.clear();
         colors.put(h.url, v);
@@ -638,15 +643,27 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             return;
         }
         posters.execute(() -> {
-            Bitmap b = decode(url, w, hgt);
-            if (b == null) return;
-            // Upload the texture now, on the render thread, not in the frame that first draws the card: that
-            // upload was most of the 36 slow draw frames on the first trip through the rows after a cold start.
-            b.prepareToDraw();
-            cache.put(url, b);
+            Bitmap decoded = decode(url, w, hgt);
+            if (decoded == null) return;
+            // The glow's colour while the pixels can still be read, then the poster as a hardware bitmap: kept
+            // only in graphics memory, not in the heap and again as its texture.
+            int color = AppAdapter.vividColor(new android.graphics.drawable.BitmapDrawable(ctx.getResources(), decoded));
+            Bitmap b = decoded;
+            try {
+                Bitmap hw = decoded.copy(Bitmap.Config.HARDWARE, false);
+                if (hw != null) {
+                    decoded.recycle();
+                    b = hw;
+                }
+            } catch (Exception ignored) { }
+            final Bitmap shown = b;
+            shown.prepareToDraw();
+            cache.put(url, shown);
             main.post(() -> {
+                if (colors.size() > 200) colors.clear();
+                colors.put(url, color);
                 if (!url.equals(h.url)) return;   // the holder was rebound to another program meanwhile
-                h.poster.setImageBitmap(b);
+                h.poster.setImageBitmap(shown);
                 h.fallback.setVisibility(View.GONE);
             });
         });

@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Corners 12dp: the Inputs panel's 20dp less its 8dp padding. Focus crossfades, as on the pills. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="150"
+    android:exitFadeDuration="200">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#F5FFFFFF" />
-            <corners android:radius="13dp" />
+            <corners android:radius="12dp" />
         </shape>
     </item>
     <item>
         <shape android:shape="rectangle">
             <solid android:color="#00000000" />
-            <corners android:radius="13dp" />
+            <corners android:radius="12dp" />
         </shape>
     </item>
 </selector>

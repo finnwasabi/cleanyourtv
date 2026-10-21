@@ -377,7 +377,7 @@
                     android:nextFocusDown="@+id/grid" />
             </LinearLayout>
 
-            <!-- What another app is playing (MediaSession, or AirPlay audio), shown only while something plays: a small
+            <!-- AirPlay audio playing (MainActivity's now playing section), shown only while it plays: a small
                  pill in the free space above the menu pills, its right end over Settings. -->
             <TextView
                 android:id="@+id/btnNowPlaying"
