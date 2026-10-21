@@ -43,8 +43,9 @@ import java.util.concurrent.Executors;
  * its programs in a horizontal list that sits in the grid's columns at tile size, so the rows read as more of the
  * grid. Focus follows the grid's rules: Up and Down move one row, the ends of a row hold focus, the glass highlight
  * and the name under the card come from Host. Posters load off the main thread into a small memory cache.
- * A row runs from screen edge to screen edge, so the next card peeks in past the last column and shows there is
- * more, and it scrolls a whole cell at a time (ColumnLayoutManager), so its cards stay in the grid's columns.
+ * A row runs from screen edge to screen edge and scrolls a whole cell at a time (ColumnLayoutManager), so its cards
+ * stay in the grid's columns. A card outside the columns is dimmed and comes up to full as it scrolls in, and a slim
+ * indicator on the title line (RowIndicator) shows where the row is, so "there is more" reads without clutter.
  */
 final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHolder> {
 
@@ -202,6 +203,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     final class RowHolder extends RecyclerView.ViewHolder {
         final TextView title;
         final RecyclerView list;
+        final RowIndicator indicator;
         final ProgramAdapter programs = new ProgramAdapter();
         final ColumnLayoutManager layout = new ColumnLayoutManager();
         int rowIndex;
@@ -210,6 +212,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             super(v);
             title = v.findViewById(R.id.channelTitle);
             list = v.findViewById(R.id.programs);
+            indicator = v.findViewById(R.id.rowIndicator);
+            layout.owner = this;
             list.setLayoutManager(layout);
             list.setAdapter(programs);
             list.setItemAnimator(null);
@@ -217,6 +221,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                     View f = rv.findFocus();
                     if (dx != 0 && f != null && host != null) host.onChannelScrolled(f);
+                    shade();
                 }
             });
         }
@@ -229,6 +234,11 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) title.getLayoutParams();
                 lp.setMarginStart(titleInset());
                 title.setLayoutParams(lp);
+                ViewGroup.MarginLayoutParams ilp = (ViewGroup.MarginLayoutParams) indicator.getLayoutParams();
+                if (ilp.getMarginEnd() != titleInset()) {
+                    ilp.setMarginEnd(titleInset());
+                    indicator.setLayoutParams(ilp);
+                }
             }
             // Edge to edge: the list reaches into the grid's side padding, which keeps the cards in the columns.
             int start = grid.getPaddingLeft(), end = grid.getPaddingRight();
@@ -240,6 +250,32 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             }
             list.setPadding(start, list.getPaddingTop(), end, list.getPaddingBottom());
             programs.set(row);
+        }
+
+        /**
+         * Dims the cards outside the columns (the one peeking in at either edge) and brings each up to full as it
+         * scrolls in, and moves the indicator. A dimmed card draws through a hardware layer, so its poster and the
+         * label under it fade as one; cards in the columns draw without one.
+         */
+        void shade() {
+            int cols = host != null ? host.columns() : 4;
+            float cell = layout.cellWidth();
+            for (int i = 0; i < list.getChildCount(); i++) {
+                View c = list.getChildAt(i);
+                float col = (c.getLeft() + c.getTranslationX() - list.getPaddingLeft()) / cell;
+                float out = Math.max(0f, Math.max(-col, col - (cols - 1)));
+                float a = 1f - PEEK_DIM * Math.min(1f, out);
+                if (c.getAlpha() == a) continue;
+                c.setAlpha(a);
+                int type = a < 1f ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
+                if (c.getLayerType() != type) c.setLayerType(type, null);
+            }
+            // Counted in cells, not RecyclerView's scroll estimate, which the side padding throws off.
+            int n = programs.getItemCount();
+            View c0 = list.getChildCount() > 0 ? list.getChildAt(0) : null;
+            float first = c0 == null ? 0f
+                    : layout.getPosition(c0) - (c0.getLeft() + c0.getTranslationX() - list.getPaddingLeft()) / cell;
+            indicator.set(Math.max(0f, first), Math.min(cols, n), n);
         }
 
         /** Focuses the card in grid column {@code column} (>= 0), else the program at {@code last}. */
@@ -413,6 +449,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         }
     }
 
+    /** How much a card outside the columns is dimmed: enough to read as "next", not as a choice. */
+    private static final float PEEK_DIM = 0.65f;
     private static final PathInterpolator GLIDE = new PathInterpolator(0.4f, 0f, 0.2f, 1f);
 
     /**
@@ -421,9 +459,19 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
      * tiles are, and the card past either end peeks in from the screen edge.
      */
     final class ColumnLayoutManager extends LinearLayoutManager {
+        RowHolder owner;
+
         ColumnLayoutManager() { super(ctx, LinearLayoutManager.HORIZONTAL, false); }
 
         private int cell() { return host != null ? host.cellWidth() : Math.round(213 * density); }
+
+        int cellWidth() { return cell(); }
+
+        @Override
+        public void onLayoutCompleted(RecyclerView.State state) {
+            super.onLayoutCompleted(state);
+            if (owner != null) owner.shade();
+        }
 
         /**
          * One more card each side than fits between the paddings: the peeking cards sit in the padding, which a

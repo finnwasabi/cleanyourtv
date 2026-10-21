@@ -8,15 +8,29 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
-    <TextView
-        android:id="@+id/channelTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:fontFamily="@font/outfit_medium"
-        android:textColor="#CCFFFFFF"
-        android:textSize="17sp"
-        android:letterSpacing="0.02"
-        android:singleLine="true" />
+    <!-- The title, and at the far end of the line the scroll indicator, lined up with the last column's card. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/channelTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/outfit_medium"
+            android:textColor="#CCFFFFFF"
+            android:textSize="17sp"
+            android:letterSpacing="0.02"
+            android:singleLine="true" />
+
+        <com.gathin.tvhome.RowIndicator
+            android:id="@+id/rowIndicator"
+            android:layout_width="44dp"
+            android:layout_height="3dp"
+            android:layout_gravity="end|center_vertical"
+            android:visibility="gone"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/programs"

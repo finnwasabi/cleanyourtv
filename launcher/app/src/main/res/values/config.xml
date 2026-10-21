@@ -33,7 +33,6 @@
         <item>com.mitv.gallery</item>
         <!-- Wanbo X7: tools and background services stay out of Home; the app library lists them and adds any back. -->
         <item>com.android.tv.settings</item>
-        <item>com.android.vending</item>
         <item>com.roysolberg.android.developertools</item>
         <item>flar2.homebutton</item>
         <item>io.github.sds100.keymapper</item>
