@@ -13,6 +13,8 @@ android {
         targetSdk 34
         versionCode 6
         versionName '2.5'
+        // This fork runs in Vietnamese (English as the fallback): leave the other 19 languages out of the APK.
+        resourceConfigurations += ['en', 'vi']
     }
 
     buildTypes {
