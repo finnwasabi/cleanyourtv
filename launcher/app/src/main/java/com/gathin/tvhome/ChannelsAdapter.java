@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Outline;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +18,7 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -41,6 +43,8 @@ import java.util.concurrent.Executors;
  * its programs in a horizontal list that sits in the grid's columns at tile size, so the rows read as more of the
  * grid. Focus follows the grid's rules: Up and Down move one row, the ends of a row hold focus, the glass highlight
  * and the name under the card come from Host. Posters load off the main thread into a small memory cache.
+ * A row runs from screen edge to screen edge, so the next card peeks in past the last column and shows there is
+ * more, and it scrolls a whole cell at a time (ColumnLayoutManager), so its cards stay in the grid's columns.
  */
 final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHolder> {
 
@@ -53,6 +57,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         void onChannelsExitUp(int column);
         /** Down from the last channel row, from this column. */
         void onChannelsExitDown(int column);
+        /** Tiles per row in the app grid. */
+        int columns();
         /** Grid position of the first channel row. */
         int channelStart();
         /** The app grid's tile size and cell width, in px, so programs line up with its columns. */
@@ -120,15 +126,19 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         return f != null && f.getTag(R.id.program_tag) != null;
     }
 
-    /** Focuses row {@code index}, at the column it last had focus in, or at {@code column} when given (>= 0). */
+    /**
+     * Focuses row {@code index}: the card in grid column {@code column} as the row is scrolled now, or, when column
+     * is -1, the program it last had focus on.
+     */
     void focusRow(int index, int column) {
         if (index < 0 || index >= rows.size() || host == null) return;
-        int col = column >= 0 ? Math.min(column, rows.get(index).programs.size() - 1) : columnFor(index);
+        final int col = column;
+        final int last = columnFor(index);
         int position = host.channelStart() + index;
         cancelPendingScroll();
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(position);
         if (vh instanceof RowHolder) {
-            ((RowHolder) vh).focusColumn(col);
+            ((RowHolder) vh).focus(col, last);
             return;
         }
         // The row was scrolled out and recycled (back up from the bottom of the grid). Jumping to it with
@@ -137,7 +147,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             grid.scrollToPosition(position);
             grid.post(() -> {
                 RecyclerView.ViewHolder h = grid.findViewHolderForAdapterPosition(position);
-                if (h instanceof RowHolder) ((RowHolder) h).focusColumn(col);
+                if (h instanceof RowHolder) ((RowHolder) h).focus(col, last);
             });
             return;
         }
@@ -148,7 +158,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 if (pendingScroll != this) return;
                 pendingScroll = null;
                 RecyclerView.ViewHolder h = rv.findViewHolderForAdapterPosition(position);
-                if (h instanceof RowHolder) ((RowHolder) h).focusColumn(col);
+                if (h instanceof RowHolder) ((RowHolder) h).focus(col, last);
             }
         };
         grid.addOnScrollListener(pendingScroll);
@@ -167,6 +177,11 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     private int columnFor(int index) {
         Integer c = lastColumn.get(rows.get(index).id);
         return c == null ? 0 : Math.min(c, rows.get(index).programs.size() - 1);
+    }
+
+    /** Left inset of a row title, so it lines up with the first card (and the first tile) under it. */
+    int titleInset() {
+        return host == null ? 0 : Math.max(0, (host.cellWidth() - host.tileWidth()) / 2);
     }
 
     @Override public long getItemId(int position) { return rows.get(position).id; }
@@ -188,13 +203,14 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         final TextView title;
         final RecyclerView list;
         final ProgramAdapter programs = new ProgramAdapter();
+        final ColumnLayoutManager layout = new ColumnLayoutManager();
         int rowIndex;
 
         RowHolder(View v) {
             super(v);
             title = v.findViewById(R.id.channelTitle);
             list = v.findViewById(R.id.programs);
-            list.setLayoutManager(new LinearLayoutManager(ctx, LinearLayoutManager.HORIZONTAL, false));
+            list.setLayoutManager(layout);
             list.setAdapter(programs);
             list.setItemAnimator(null);
             list.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -211,10 +227,33 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             // Line the title up with the first card's left edge, as the grid's first column.
             if (host != null) {
                 ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) title.getLayoutParams();
-                lp.setMarginStart(Math.max(0, (host.cellWidth() - host.tileWidth()) / 2));
+                lp.setMarginStart(titleInset());
                 title.setLayoutParams(lp);
             }
+            // Edge to edge: the list reaches into the grid's side padding, which keeps the cards in the columns.
+            int start = grid.getPaddingLeft(), end = grid.getPaddingRight();
+            ViewGroup.MarginLayoutParams llp = (ViewGroup.MarginLayoutParams) list.getLayoutParams();
+            if (llp.leftMargin != -start || llp.rightMargin != -end) {
+                llp.leftMargin = -start;
+                llp.rightMargin = -end;
+                list.setLayoutParams(llp);
+            }
+            list.setPadding(start, list.getPaddingTop(), end, list.getPaddingBottom());
             programs.set(row);
+        }
+
+        /** Focuses the card in grid column {@code column} (>= 0), else the program at {@code last}. */
+        void focus(int column, int last) {
+            int n = programs.getItemCount();
+            if (n == 0) return;
+            int index = column >= 0 ? layout.firstPosition() + column : last;
+            focusColumn(Math.max(0, Math.min(index, n - 1)));
+        }
+
+        /** Grid column of a laid out card, 0 to columns - 1. */
+        int columnOf(View item) {
+            int cols = host != null ? host.columns() : 4;
+            return Math.max(0, Math.min(cols - 1, layout.columnOf(item)));
         }
 
         void focusColumn(int column) {
@@ -285,7 +324,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 int tileW = host != null ? host.tileWidth() : Math.round(180 * density);
                 float aspect = Math.max(0.5f, Math.min(16f / 9f, p.aspect));
                 int w = Math.min(tileW, Math.round(h * aspect));
-                int itemW = aspect >= 16f / 9f - 0.01f ? cell : w + (cell - tileW);
+                // Always one cell, narrow art centred in it, so a row scrolled by whole cells stays in the columns.
+                int itemW = cell;
                 ViewGroup.LayoutParams ilp = itemView.getLayoutParams();
                 if (ilp.width != itemW) {
                     ilp.width = itemW;
@@ -349,14 +389,18 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                         return key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN;
                     }
                     switch (key) {
-                        case KeyEvent.KEYCODE_DPAD_UP:
-                            if (rowIndex == 0) { if (host != null) host.onChannelsExitUp(column); }
-                            else focusRow(rowIndex - 1, column);
+                        case KeyEvent.KEYCODE_DPAD_UP: {
+                            int col = columnOf(itemView);
+                            if (rowIndex == 0) { if (host != null) host.onChannelsExitUp(col); }
+                            else focusRow(rowIndex - 1, col);
                             return true;
-                        case KeyEvent.KEYCODE_DPAD_DOWN:
-                            if (rowIndex < rows.size() - 1) focusRow(rowIndex + 1, column);
-                            else if (host != null) host.onChannelsExitDown(column);
+                        }
+                        case KeyEvent.KEYCODE_DPAD_DOWN: {
+                            int col = columnOf(itemView);
+                            if (rowIndex < rows.size() - 1) focusRow(rowIndex + 1, col);
+                            else if (host != null) host.onChannelsExitDown(col);
                             return true;
+                        }
                         case KeyEvent.KEYCODE_DPAD_LEFT:
                             return column == 0;   // the row's ends hold focus, as in the app grid
                         case KeyEvent.KEYCODE_DPAD_RIGHT:
@@ -366,6 +410,53 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                     }
                 });
             }
+        }
+    }
+
+    private static final PathInterpolator GLIDE = new PathInterpolator(0.4f, 0f, 0.2f, 1f);
+
+    /**
+     * A row that scrolls a whole cell at a time. Focus on a card past the last column scrolls the row until that card
+     * sits in the last column; focus before the first column, until it sits in the first. Cards stay where the app
+     * tiles are, and the card past either end peeks in from the screen edge.
+     */
+    final class ColumnLayoutManager extends LinearLayoutManager {
+        ColumnLayoutManager() { super(ctx, LinearLayoutManager.HORIZONTAL, false); }
+
+        private int cell() { return host != null ? host.cellWidth() : Math.round(213 * density); }
+
+        /**
+         * One more card each side than fits between the paddings: the peeking cards sit in the padding, which a
+         * scroll does not fill on its own, so without this the card past the last column vanished after a scroll.
+         */
+        @Override
+        protected void calculateExtraLayoutSpace(@NonNull RecyclerView.State state, @NonNull int[] extra) {
+            extra[0] = getPaddingLeft() + cell();
+            extra[1] = getPaddingRight() + cell();
+        }
+
+        /** Grid column an item sits in now, unclamped: -1 is the card peeking in on the left. */
+        int columnOf(View item) {
+            return Math.round((getDecoratedLeft(item) - getPaddingLeft()) / (float) cell());
+        }
+
+        /** Position of the program in the first grid column. */
+        int firstPosition() {
+            if (getChildCount() == 0) return 0;
+            View c = getChildAt(0);
+            return Math.max(0, getPosition(c) - columnOf(c));
+        }
+
+        @Override
+        public boolean requestChildRectangleOnScreen(@NonNull RecyclerView parent, @NonNull View child,
+                @NonNull Rect rect, boolean immediate, boolean focusedChildVisible) {
+            int cols = host != null ? host.columns() : 4;
+            int target = Math.max(0, Math.min(columnOf(child), cols - 1));
+            int dx = getDecoratedLeft(child) - getPaddingLeft() - target * cell();
+            if (dx == 0) return false;
+            if (immediate || !animations) parent.scrollBy(dx, 0);
+            else parent.smoothScrollBy(dx, 0, GLIDE, reducedMotion ? 200 : 320);
+            return true;
         }
     }
 

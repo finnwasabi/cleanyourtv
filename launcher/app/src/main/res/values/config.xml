@@ -31,6 +31,14 @@
     <string-array name="hidden_apps">
         <item>com.mediatek.wwtv.tvcenter</item>
         <item>com.mitv.gallery</item>
+        <!-- Wanbo X7: tools and background services stay out of Home; the app library lists them and adds any back. -->
+        <item>com.android.tv.settings</item>
+        <item>com.android.vending</item>
+        <item>com.roysolberg.android.developertools</item>
+        <item>flar2.homebutton</item>
+        <item>io.github.sds100.keymapper</item>
+        <item>io.github.jqssun.airplay</item>
+        <item>org.localsend.localsend_app</item>
     </string-array>
 
     <!-- The TV's Live TV / tuner app, offered at the end of the Inputs menu. Leave empty to omit. -->
@@ -140,7 +148,7 @@
     <bool name="show_home_settings_shortcut">false</bool>
 
     <!-- Installed launchable apps, including ordinary Android apps. Also settable in config.json. -->
-    <bool name="app_library">false</bool>
+    <bool name="app_library">true</bool>
 
     <!-- Module cards: an app that declares a card (docs/specs/card.md) can stand in for its tile with its own
          label, caption and glow colour, once you answer Show on the prompt. false: never look for cards or ask. -->

@@ -418,7 +418,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             @Override public int getSpanSize(int position) {
                 if (adapter == null || home == null) return 1;
                 // The library pill and every channel row take a whole line.
-                return home.isChannelAt(position) || adapter.isLibraryAt(home.toApp(position)) ? COLUMNS : 1;
+                return home.isFullWidthAt(position) || adapter.isLibraryAt(home.toApp(position)) ? COLUMNS : 1;
             }
         });
         grid.setHasFixedSize(true);
@@ -1793,6 +1793,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     }
 
     @Override public int channelStart() { return home.channelStart(); }
+
+    @Override public int columns() { return COLUMNS; }
 
     @Override public int tileWidth() { View c = dockCard(); return c != null && c.getWidth() > 0 ? c.getWidth() : Math.round(180 * density); }
 

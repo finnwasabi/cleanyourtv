@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "Apps" title between the channel rows and the app grid (HomeAdapter), in a channel row title's style. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingTop="10dp"
+    android:focusable="false"
+    android:importantForAccessibility="no">
+
+    <TextView
+        android:id="@+id/channelTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/outfit_medium"
+        android:textColor="#CCFFFFFF"
+        android:textSize="17sp"
+        android:letterSpacing="0.02"
+        android:singleLine="true"
+        android:text="@string/apps_section" />
+</FrameLayout>

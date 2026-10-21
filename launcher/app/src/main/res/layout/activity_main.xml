@@ -339,17 +339,23 @@
             </LinearLayout>
         </RelativeLayout>
 
-        <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells. -->
+        <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells.
+             It runs to the screen edges, with the page margin as the grid's side padding, so a channel row can
+             reach the edge and show its next card peeking in. -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:layout_marginStart="-56dp"
+            android:layout_marginEnd="-56dp">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/grid"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:paddingStart="56dp"
+                android:paddingEnd="56dp"
                 android:paddingTop="10dp"
                 android:paddingBottom="40dp"
                 android:clipToPadding="false"

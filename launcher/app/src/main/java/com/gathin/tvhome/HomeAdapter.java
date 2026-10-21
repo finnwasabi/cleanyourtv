@@ -1,17 +1,21 @@
 package com.gathin.tvhome;
 
+import android.view.LayoutInflater;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 /**
- * The home screen's one list: the dock row, then the channel rows, then the rest of the app grid and the library
- * pill. AppAdapter and the rest of the launcher keep counting in app positions (0 is the first dock tile); grid
+ * The home screen's one list: the dock row, then the channel rows, then an "Apps" title over the rest of the app
+ * grid and the library pill. The title only shows between channel rows and apps, where it marks where one ends. AppAdapter and the rest of the launcher keep counting in app positions (0 is the first dock tile); grid
  * positions are what the RecyclerView sees. toGrid and toApp convert between the two.
  */
 final class HomeAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_CHANNEL = 100;
+    private static final int TYPE_TITLE = 101;
+    private static final long TITLE_ID = Long.MIN_VALUE;
 
     private final AppAdapter apps;
     private final ChannelsAdapter channels;
@@ -57,32 +61,46 @@ final class HomeAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     int channelCount() { return channels.getItemCount(); }
 
-    /** Grid position of an app position (the library pill counts as the app position after the last app). */
-    int toGrid(int app) {
-        return app < splitAt() ? app : app + channels.getItemCount();
+    /** 1 when the "Apps" title shows: channel rows above, and apps (or the library pill) after the dock. */
+    private int titleCount() {
+        return channels.getItemCount() > 0 && apps.getItemCount() > splitAt() ? 1 : 0;
     }
 
-    /** App position of a grid position, or RecyclerView.NO_POSITION for a channel row. */
+    /** Grid position of an app position (the library pill counts as the app position after the last app). */
+    int toGrid(int app) {
+        return app < splitAt() ? app : app + channels.getItemCount() + titleCount();
+    }
+
+    /** App position of a grid position, or RecyclerView.NO_POSITION for a channel row or the title. */
     int toApp(int grid) {
         if (grid == RecyclerView.NO_POSITION || grid < splitAt()) return grid;
-        int c = channels.getItemCount();
+        int c = channels.getItemCount() + titleCount();
         return grid < splitAt() + c ? RecyclerView.NO_POSITION : grid - c;
     }
+
+    boolean isTitleAt(int grid) {
+        return titleCount() == 1 && grid == splitAt() + channels.getItemCount();
+    }
+
+    /** A row that spans the whole grid width: a channel row or the title. */
+    boolean isFullWidthAt(int grid) { return isChannelAt(grid) || isTitleAt(grid); }
 
     boolean isChannelAt(int grid) {
         return grid >= splitAt() && grid < splitAt() + channels.getItemCount();
     }
 
-    @Override public int getItemCount() { return apps.getItemCount() + channels.getItemCount(); }
+    @Override public int getItemCount() { return apps.getItemCount() + channels.getItemCount() + titleCount(); }
 
     @Override
     public int getItemViewType(int position) {
+        if (isTitleAt(position)) return TYPE_TITLE;
         return isChannelAt(position) ? TYPE_CHANNEL : apps.getItemViewType(toApp(position));
     }
 
     @Override
     public long getItemId(int position) {
         // Channel ids come from the TV provider; keep them apart from the apps' component hashes.
+        if (isTitleAt(position)) return TITLE_ID;
         return isChannelAt(position) ? Long.MAX_VALUE - channels.getItemId(position - splitAt())
                 : apps.getItemId(toApp(position));
     }
@@ -90,12 +108,25 @@ final class HomeAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     @NonNull
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if (viewType == TYPE_TITLE) {
+            return new RecyclerView.ViewHolder(LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.row_section_title, parent, false)) { };
+        }
         return viewType == TYPE_CHANNEL ? channels.onCreateViewHolder(parent, viewType)
                 : apps.onCreateViewHolder(parent, viewType);
     }
 
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+        if (isTitleAt(position)) {
+            TextView t = holder.itemView.findViewById(R.id.channelTitle);
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) t.getLayoutParams();
+            if (lp.getMarginStart() != channels.titleInset()) {
+                lp.setMarginStart(channels.titleInset());
+                t.setLayoutParams(lp);
+            }
+            return;
+        }
         if (isChannelAt(position)) channels.onBindViewHolder((ChannelsAdapter.RowHolder) holder, position - splitAt());
         else apps.onBindViewHolder(holder, toApp(position));
     }

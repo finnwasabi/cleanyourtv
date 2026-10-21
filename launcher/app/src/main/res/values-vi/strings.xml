@@ -68,4 +68,22 @@
     <string name="dock_edit">Chỉnh sửa dock</string>
     <string name="dock_edit_hint">Chọn vị trí trên dock cần đổi rồi nhấn OK. Nhấn Quay lại để kết thúc.</string>
     <string name="dock_edit_pick_app">Giờ chọn ứng dụng để đặt vào đó rồi nhấn OK. Nhấn Quay lại để chọn vị trí khác.</string>
+    <string name="apps_section">Ứng dụng</string>
+    <string name="app_library">Tất cả ứng dụng</string>
+    <string name="library_empty">Không tìm thấy ứng dụng nào mở được</string>
+    <string name="library_on_home">Đã có trên Home</string>
+    <string name="library_add_home">Thêm vào Home</string>
+    <string name="library_remove_shortcut">Gỡ khỏi Home</string>
+    <string name="library_open">Mở</string>
+    <string name="library_app_info">Thông tin ứng dụng</string>
+    <string name="library_save_failed">Không lưu được lối tắt</string>
+    <string name="library_recent">Mới · Thêm vào Home</string>
+    <string name="library_hint_add">Bấm để thêm vào Home · Giữ để xem tuỳ chọn</string>
+    <string name="library_hint_open">Bấm để mở · Giữ để xem tuỳ chọn</string>
+    <plurals name="library_app_count">
+        <item quantity="other">%1$d ứng dụng</item>
+    </plurals>
+    <string name="reorder">Sắp xếp ứng dụng</string>
+    <string name="reorder_hint">OK để nhấc ứng dụng, phím mũi tên để di chuyển, Back để đặt xuống. Back lần nữa để xong.</string>
+    <string name="reorder_not_saved">Không lưu được thứ tự mới</string>
 </resources>
