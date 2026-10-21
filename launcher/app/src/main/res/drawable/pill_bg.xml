@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- Focus crossfades in and out (a soft change of colour, not a cut); only the pill redraws meanwhile. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:enterFadeDuration="170"
+    android:exitFadeDuration="230">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="#F5FFFFFF" />
