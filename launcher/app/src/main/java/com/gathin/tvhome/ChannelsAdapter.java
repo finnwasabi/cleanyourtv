@@ -36,7 +36,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The channel rows (ChannelRows) between the dock and the app grid, placed by HomeAdapter: one item per channel,
@@ -80,8 +79,8 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     /** Last focused program per row, so Up and Down come back to the column they left. */
     private final Map<Long, Integer> lastColumn = new HashMap<>();
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ExecutorService loader = Executors.newSingleThreadExecutor();
-    private final ExecutorService posters = Executors.newFixedThreadPool(2);
+    private final ExecutorService loader = BackgroundThreads.single("channels");
+    private final ExecutorService posters = BackgroundThreads.pool(2, "posters");
     private boolean loading;
     /** Off (dock_row false): no rows load, so none show. */
     private boolean disabled;
@@ -109,6 +108,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     /** Drops the posters kept for scrolling (Home in the background, memory short); those on cards stay. */
     void trimMemory() {
         cache.evictAll();
+        shelfCache.evictAll();
         colors.clear();
     }
 
@@ -572,6 +572,78 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         }
     }
 
+    // ---- top shelf ---------------------------------------------------------------------------------
+
+    /** What a dock app has to show on the top shelf: its first Watch Next program, else its first channel's. */
+    static final class Featured {
+        final ChannelRows.Program program;
+        final String rowName;
+
+        Featured(ChannelRows.Program program, String rowName) {
+            this.program = program;
+            this.rowName = rowName;
+        }
+    }
+
+    Featured featured(String pkg) {
+        if (pkg == null) return null;
+        for (ChannelRows.Row r : rows) {
+            if (r.id != ChannelRows.WATCH_NEXT_ID) continue;
+            for (ChannelRows.Program p : r.programs) if (pkg.equals(p.pkg) && p.poster != null) return new Featured(p, r.name);
+        }
+        for (ChannelRows.Row r : rows) {
+            if (!pkg.equals(r.pkg)) continue;
+            for (ChannelRows.Program p : r.programs) if (p.poster != null) return new Featured(p, r.name);
+        }
+        return null;
+    }
+
+    /** Shelf artwork already baked, by URL and size: two are enough to flick between dock apps. */
+    private final LruCache<String, Bitmap> shelfCache = new LruCache<>(2);
+
+    interface ShelfCallback { void onShelf(Bitmap art); }
+
+    /**
+     * The program's artwork at {@code w} x {@code h}, centre-cropped and faded out at its left, top and bottom
+     * edges, so it melts into the wallpaper with no mask at draw time. Decoded off the main thread.
+     */
+    void shelfArt(String url, int w, int h, ShelfCallback cb) {
+        String key = url + "@" + w + "x" + h;
+        Bitmap hit = shelfCache.get(key);
+        if (hit != null) {
+            cb.onShelf(hit);
+            return;
+        }
+        posters.execute(() -> {
+            Bitmap src = decode(url, w / 2, h / 2);
+            if (src == null) return;
+            Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas c = new android.graphics.Canvas(out);
+            float s = Math.max(w / (float) src.getWidth(), h / (float) src.getHeight());
+            android.graphics.Matrix m = new android.graphics.Matrix();
+            m.setScale(s, s);
+            m.postTranslate((w - src.getWidth() * s) / 2f, (h - src.getHeight() * s) * 0.35f);
+            c.drawBitmap(src, m, new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG));
+            android.graphics.Paint fade = new android.graphics.Paint();
+            fade.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+            // Left: in over the first half, eased. Top: clear under the pills. Bottom: gone before the dock.
+            fade.setShader(new android.graphics.LinearGradient(0, 0, w * 0.55f, 0,
+                    new int[]{0x00000000, 0x33000000, 0xB3000000, 0xFF000000}, new float[]{0f, 0.35f, 0.75f, 1f},
+                    android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, w, h, fade);
+            fade.setShader(new android.graphics.LinearGradient(0, 0, 0, h,
+                    new int[]{0x00000000, 0x80000000, 0xFF000000, 0xFF000000, 0x00000000},
+                    new float[]{0f, 0.22f, 0.42f, 0.70f, 1f}, android.graphics.Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, w, h, fade);
+            src.recycle();
+            out.prepareToDraw();
+            main.post(() -> {
+                shelfCache.put(key, out);
+                cb.onShelf(out);
+            });
+        });
+    }
+
     /** Poster colours already worked out, by poster URL: the glow behind the grid takes them, as tiles' banners. */
     private final Map<String, Integer> colors = new HashMap<>();
 
@@ -636,6 +708,9 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         posters.execute(() -> {
             Bitmap b = decode(url, w, hgt);
             if (b == null) return;
+            // Upload the texture now, on the render thread, not in the frame that first draws the card: that
+            // upload was most of the 36 slow draw frames on the first trip through the rows after a cold start.
+            b.prepareToDraw();
             cache.put(url, b);
             main.post(() -> {
                 if (!url.equals(h.url)) return;   // the holder was rebound to another program meanwhile

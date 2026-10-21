@@ -1,0 +1,9 @@
+# Ahead-of-time compiled on install (ProfileInstaller): everything Home runs, the grid and the spring animations.
+# Without it a fresh install interprets this code during the first scrolls: 9.60% janky frames, 65 ms at the
+# 99th percentile and 14 slow UI thread frames on the first trip down and up the grid on a Wanbo X7 (MT9676).
+HSPLcom/gathin/tvhome/**;->**(**)**
+Lcom/gathin/tvhome/**;
+HSPLandroidx/recyclerview/widget/**;->**(**)**
+Landroidx/recyclerview/widget/**;
+HSPLandroidx/dynamicanimation/animation/**;->**(**)**
+Landroidx/dynamicanimation/animation/**;

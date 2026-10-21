@@ -30,6 +30,17 @@
         android:layout_height="match_parent"
         android:alpha="0" />
 
+    <!-- Top shelf artwork: what the focused dock app has for you (its Watch Next or first channel program), large
+         on the right above the dock. Sized and filled in code; the fades are baked into the bitmap. -->
+    <ImageView
+        android:id="@+id/shelfArt"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
+        android:layout_gravity="top|end"
+        android:scaleType="fitXY"
+        android:alpha="0"
+        android:importantForAccessibility="no" />
+
     <!-- Race-weekend panel (a theme's race_calendar, see RaceWeekend): in the free space under the clock,
          shown only from shortly before a weekend's first session until the race is over. Updated once a
          minute with the clock, never animated. -->
