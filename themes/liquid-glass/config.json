@@ -1,5 +1,7 @@
 {
   "background_color": "#070A14",
   "wallpaper": true,
-  "liquid_glass": true
+  "liquid_glass": true,
+  "wallpaper_rotation_minutes": 60,
+  "wallpaper_order": "time_of_day"
 }

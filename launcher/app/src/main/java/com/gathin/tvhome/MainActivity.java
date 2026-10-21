@@ -1631,10 +1631,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             if (ambientGlow && advancedEffects) {
                 transitionAmbient(color);
             } else if (ambientGlow && color != ambientColor) {
-                ambient.animate().alpha(0.35f).setDuration(200).withEndAction(() -> {
-                    setAmbient(color);
-                    ambient.animate().alpha(1f).setDuration(500).start();
-                }).start();
+                glowTo(color);
             }
         } else {
             hero.setY(y);
@@ -1855,11 +1852,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             ambient.animate().alpha(1f).setDuration(300).start();
             return;
         }
-        // The same dip-and-swap as the dock's top shelf.
-        ambient.animate().alpha(0.35f).setDuration(ambient.getAlpha() > 0.35f ? 200 : 0).withEndAction(() -> {
+        glowTo(color);
+    }
+
+    /**
+     * The glow to a new colour in one short turn of its tint. It covers the whole screen, so every frame it changes
+     * is a full-screen redraw, where a frame that only moves the highlight redraws a small part: the old dip and
+     * swap (200 ms down, 500 ms back) kept the projector redrawing everything for 700 ms after each move, 21 ms of
+     * GPU a frame against 7-12 ms with the glow off. 180 ms of colour change instead.
+     */
+    private void glowTo(int color) {
+        stopAmbientAnimation();
+        ambient.animate().cancel();
+        if (ambient.getAlpha() < 1f) ambient.animate().alpha(1f).setDuration(180).start();
+        if (ambient.getBackground() == null) {
             setAmbient(color);
-            ambient.animate().alpha(1f).setDuration(500).start();
-        }).start();
+            return;
+        }
+        if (color == ambientColor) return;
+        ambientAnimator = ValueAnimator.ofObject(new ArgbEvaluator(), ambientColor, color);
+        ambientAnimator.setDuration(180);
+        ambientAnimator.addUpdateListener(animation -> setAmbient((int) animation.getAnimatedValue()));
+        ambientAnimator.start();
     }
 
     private void hideHero() {

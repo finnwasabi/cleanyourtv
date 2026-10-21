@@ -12,9 +12,38 @@ final class WallpaperRotation {
     /** Playback orders persisted in config.json (wallpaper_order). */
     static final String ORDER_SEQUENTIAL = "sequential";
     static final String ORDER_SHUFFLE = "shuffle";
+    /**
+     * By the time of day: each picture's name starts with the hour it takes over ("06-day.jpg", "17-dusk.jpg",
+     * "22-night.jpg"), and it shows until the next one's hour.
+     */
+    static final String ORDER_TIME = "time_of_day";
 
     static boolean validOrder(String order) {
-        return ORDER_SEQUENTIAL.equals(order) || ORDER_SHUFFLE.equals(order);
+        return ORDER_SEQUENTIAL.equals(order) || ORDER_SHUFFLE.equals(order) || ORDER_TIME.equals(order);
+    }
+
+    /** The hour 0-23 a name starts with ("06-day.jpg" is 6), or -1. */
+    static int startHour(String name) {
+        if (name == null || name.length() < 3 || !Character.isDigit(name.charAt(0)) || !Character.isDigit(name.charAt(1))
+                || Character.isDigit(name.charAt(2))) return -1;
+        int h = (name.charAt(0) - '0') * 10 + (name.charAt(1) - '0');
+        return h < 24 ? h : -1;
+    }
+
+    /**
+     * The picture for {@code hour}: the latest start hour not after it, else the latest of all (a night that began
+     * the evening before). Pictures without an hour are left out; null when none has one.
+     */
+    static File byHour(List<File> images, int hour) {
+        File best = null, latest = null;
+        int bestHour = -1, latestHour = -1;
+        for (File image : images) {
+            int h = startHour(image.getName());
+            if (h < 0) continue;
+            if (h <= hour && h > bestHour) { best = image; bestHour = h; }
+            if (h > latestHour) { latest = image; latestHour = h; }
+        }
+        return best != null ? best : latest;
     }
 
     static List<File> images(File directory) {

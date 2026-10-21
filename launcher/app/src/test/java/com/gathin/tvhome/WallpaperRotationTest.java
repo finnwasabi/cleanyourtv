@@ -19,6 +19,22 @@ import org.junit.Test;
 
 public class WallpaperRotationTest {
 
+    @Test
+    public void timeOfDayPicksTheLatestStartNotAfterTheHour() {
+        List<File> images = Arrays.asList(new File("06-day.jpg"), new File("17-dusk.jpg"), new File("22-night.jpg"),
+                new File("plain.jpg"));
+        assertEquals("06-day.jpg", WallpaperRotation.byHour(images, 6).getName());
+        assertEquals("06-day.jpg", WallpaperRotation.byHour(images, 16).getName());
+        assertEquals("17-dusk.jpg", WallpaperRotation.byHour(images, 17).getName());
+        assertEquals("22-night.jpg", WallpaperRotation.byHour(images, 23).getName());
+        // Before the first start: the night that began the evening before.
+        assertEquals("22-night.jpg", WallpaperRotation.byHour(images, 3).getName());
+        assertNull(WallpaperRotation.byHour(Collections.singletonList(new File("plain.jpg")), 12));
+        assertEquals(-1, WallpaperRotation.startHour("123-x.jpg"));
+        assertEquals(-1, WallpaperRotation.startHour("25-x.jpg"));
+        assertTrue(WallpaperRotation.validOrder(WallpaperRotation.ORDER_TIME));
+    }
+
     private static File touch(File dir, String name, int bytes) throws IOException {
         File f = new File(dir, name);
         try (FileOutputStream out = new FileOutputStream(f)) {
