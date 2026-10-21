@@ -27,7 +27,7 @@
 
 The `wanbo-x7` branch adds poster rows for the preview channels apps publish ("Continue watching",
 YouTube recommendations) between the dock and the app grid, and a `liquid_glass` theme
-([`themes/liquid-glass/`](themes/liquid-glass/)), and the weather after the date. All are optional keys, documented in [`themes/`](themes/README.md#keys).
+([`themes/liquid-glass/`](themes/liquid-glass/)), and the weather above the date. All are optional keys, documented in [`themes/`](themes/README.md#keys).
 
 Measured on 21 October 2026 against Projectivy Launcher 4.71, the launcher it replaced. The TV is a
 Wanbo X7 Pro Max projector: Google TV 14, MediaTek MT9676, Mali-G52, 1.8 GB RAM, 32-bit userspace. The
