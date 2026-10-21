@@ -18,7 +18,7 @@ powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 th
 | `aurora/` | A dark aurora wallpaper (teal and violet on navy, darker at the bottom) with a matching background colour |
 | `dussehra/` | Festive skin for Dussehra (ends 21 Oct 2026): a marigold toran, a faint gold rangoli, a diya for Wi-Fi, a bell for Inputs, a marigold for Settings and a petal shower |
 | `six-columns/` | Six smaller tiles per row and one grid row visible under the dock |
-| `liquid-glass/` | The aurora wallpaper with `liquid_glass` on: the dock band, the top pills and the Inputs panel become frosted glass over it |
+| `liquid-glass/` | `liquid_glass` on over a dark silk wallpaper (ink, deep blue, violet and plum ribbons, drawn by `wallpaper.py`): the dock band, the top pills and the Inputs panel become frosted glass that picks up the ribbons' colour |
 
 ## Keys
 
