@@ -1033,6 +1033,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        if (channels != null) channels.cancelPendingScroll();
         stopStats();
         listenSessions(false);
         if (diya != null) diya.stop();
@@ -2219,6 +2220,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private void focusTile(int position) {
         libraryFocusPending = false;
         cancelPendingFocusScroll();
+        if (channels != null) channels.cancelPendingScroll();   // a row still gliding in must not take focus back
         if (adapter.appCount() == 0) {
             if (adapter.isLibraryAt(0)) focusLibrary();
             else btnWifi.requestFocus();

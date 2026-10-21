@@ -62,5 +62,5 @@ img *= (1 - 0.30 * np.clip((X - 0.5) ** 2 * 1.1 + (Y - 0.5) ** 2 * 1.5 - 0.06, 0
 rng = np.random.default_rng(7)
 img += rng.normal(0, 1.1 / 255, img.shape).astype(np.float32)
 out = Image.fromarray(np.clip(img * 255 + 0.5, 0, 255).astype(np.uint8))
-out.save(sys.argv[1], quality=90, optimize=True, progressive=True, subsampling=0)
+out.save(sys.argv[1], quality=90, optimize=True, progressive=False, subsampling=0)
 if len(sys.argv) > 2: out.resize((960, 540), Image.LANCZOS).save(sys.argv[2])
