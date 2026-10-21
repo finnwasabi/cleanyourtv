@@ -152,6 +152,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean showStats;
     /** The weather beside the date (Weather), when "weather" is on. */
     private boolean weatherOn;
+    /** The grid's frame, which fades rows out under the header. */
+    private EdgeFadeLayout gridFrame;
     private View weatherView;
     private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
@@ -379,6 +381,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
+        gridFrame = findViewById(R.id.gridFrame);
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -415,12 +418,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 if (dockRow && getPosition(child) < COLUMNS) return false;
                 int top = child.getTop() + rect.top;
                 int bottom = top + rect.height();
+                // A channel row comes in whole, its title too: the focused card alone left the title under the header.
+                if (home != null && home.isFullWidthAt(getPosition(child))) {
+                    top = child.getTop();
+                    bottom = child.getBottom();
+                }
+                // Rows stop below the fade under the header, never in it.
+                int limitTop = gridFrame != null ? gridFrame.fadeLength() : 0;
                 // A row already fully on screen stays put, even inside the bottom padding (the last row
                 // rows_below_dock leaves visible ends there; nudging it up was the bug). A row that has to scroll
                 // in still stops at the padding line, clear of the screen edge, as before.
                 int limitBottom = getHeight() - getPaddingBottom();
                 int dy;
-                if (top < 0) dy = top;
+                if (top < limitTop) dy = top - limitTop;
                 else if (bottom <= getHeight()) dy = 0;
                 else dy = Math.min(top, bottom - limitBottom);
                 if (dy == 0) return false;
@@ -450,7 +460,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, liquidGlass ? grid : null));
+        if (dockRow) {
+            DockDecoration band = new DockDecoration(COLUMNS, density, cinematic, liquidGlass ? grid : null);
+            grid.addItemDecoration(band);
+            gridFrame.setDock(band);
+        }
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -1477,7 +1491,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
      * name above the dock does not show (every grid tile has its name underneath).
      */
     private void showGlowOnly(int position) {
-        int color = adapter.ambientColorAt(position);
+        showGlow(adapter.ambientColorAt(position));
+    }
+
+    /** The glow behind the grid in {@code color}, without the big name; a channel card passes its poster's colour. */
+    private void showGlow(int color) {
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -1801,9 +1819,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     /** Grid position of an app position. */
     private int gridPos(int appPosition) { return home == null ? appPosition : home.toGrid(appPosition); }
 
-    @Override public void onChannelFocused(View card) {
+    @Override public void onChannelFocused(View card, int color) {
         libraryFocusPending = false;
-        hideHero();
+        if (color != 0) showGlow(color);
+        else hideHero();
         moveGlassTo(card, true);
     }
 

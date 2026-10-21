@@ -20,6 +20,10 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     /** Liquid glass band (theme key liquid_glass), drawn over the grid it decorates; null keeps the flat band. */
     private final LiquidGlassDrawable glass;
     private final android.graphics.Rect bounds = new android.graphics.Rect();
+    /** EdgeFadeLayout's fade for the band as it scrolls up under the header; 1 on screen. */
+    private float fade = 1f;
+    private final int bandAlpha, edgeAlpha;
+    private final RectF last = new RectF();
 
     /** @param translucent the cinematic shelf's band: the artwork and the glow show through it. */
     DockDecoration(int dockSize, float density, boolean translucent, View glassHost) {
@@ -30,6 +34,24 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(density);
         edge.setColor(translucent ? 0x26FFFFFF : 0x1FFFFFFF);
+        bandAlpha = band.getAlpha();
+        edgeAlpha = edge.getAlpha();
+    }
+
+    /** Works out the band's fade from where it was last drawn; true when it changed and the band needs a redraw. */
+    boolean fadeTo(RecyclerView parent) {
+        float f = 1f;
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            int pos = parent.getChildAdapterPosition(child);
+            if (pos < 0 || pos >= dockSize) continue;
+            float t = child.getTop() + child.getTranslationY();
+            f = EdgeFadeLayout.visible(t, t + child.getHeight());
+            break;
+        }
+        if (f == fade) return false;
+        fade = f;
+        return true;
     }
 
     @Override
@@ -71,12 +93,16 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         float side = Math.max(0f, Math.min(pad, Math.min(rect.left, parent.getWidth() - rect.right) - density));
         rect.inset(-side, -pad);
         float radius = 26 * density;
+        if (fade <= 0f) return;
         if (glass != null) {
             rect.roundOut(bounds);
             glass.setBounds(bounds);
+            glass.setAlpha(Math.round(255 * fade));
             glass.draw(c);
             return;
         }
+        band.setAlpha(Math.round(bandAlpha * fade));
+        edge.setAlpha(Math.round(edgeAlpha * fade));
         c.drawRoundRect(rect, radius, radius, band);
         c.drawRoundRect(rect, radius, radius, edge);
     }

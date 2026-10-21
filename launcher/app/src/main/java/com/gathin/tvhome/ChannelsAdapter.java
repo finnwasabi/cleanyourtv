@@ -50,8 +50,8 @@ import java.util.concurrent.Executors;
 final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHolder> {
 
     interface Host {
-        /** A program card got focus: move the glass highlight onto it. */
-        void onChannelFocused(View card);
+        /** A program card got focus: move the glass highlight onto it, the glow to its poster's colour (0: none yet). */
+        void onChannelFocused(View card, int color);
         /** The focused card's row scrolled sideways: keep the glass on the card. */
         void onChannelScrolled(View card);
         /** Up from the first channel row, from this column. */
@@ -418,7 +418,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                     }
                     if (!has) return;
                     lastColumn.put(row.id, column);
-                    if (host != null) host.onChannelFocused(v);
+                    if (host != null) host.onChannelFocused(v, posterColor(this));
                 });
                 card.setOnKeyListener((v, key, event) -> {
                     if (event.getAction() != KeyEvent.ACTION_DOWN) {
@@ -506,6 +506,22 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             else parent.smoothScrollBy(dx, 0, GLIDE, reducedMotion ? 200 : 320);
             return true;
         }
+    }
+
+    /** Poster colours already worked out, by poster URL: the glow behind the grid takes them, as tiles' banners. */
+    private final Map<String, Integer> colors = new HashMap<>();
+
+    /** The vivid colour of a card's poster, as AppAdapter picks one from a banner; 0 while the poster loads. */
+    private int posterColor(RowHolder.ProgramHolder h) {
+        if (h.url == null) return 0;
+        Integer c = colors.get(h.url);
+        if (c != null) return c;
+        android.graphics.drawable.Drawable d = h.poster.getDrawable();
+        if (d == null || h.poster.getVisibility() != View.VISIBLE) return 0;
+        int v = AppAdapter.vividColor(d);
+        if (colors.size() > 200) colors.clear();
+        colors.put(h.url, v);
+        return v;
     }
 
     /** Opens a program the way the stock launcher does: its intent_uri, else the app itself. */
