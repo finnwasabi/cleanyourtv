@@ -2,4 +2,6 @@
 <resources>
     <!-- The ChannelRows.Program a channel card shows, so focus checks can tell a program card from a tile. -->
     <item name="program_tag" type="id" />
+    <item name="name_scroller" type="id" />
+    <item name="name_gravity" type="id" />
 </resources>

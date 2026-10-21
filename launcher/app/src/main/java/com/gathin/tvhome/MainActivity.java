@@ -152,10 +152,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean showStats;
     /** The weather beside the date (Weather), when "weather" is on. */
     private boolean weatherOn;
+    /** A quote of the day in place of the greeting (greeting_quotes). */
+    private boolean quotes;
     /** The grid's frame, which fades rows out under the header. */
     private EdgeFadeLayout gridFrame;
     /** The last focus was a channel card, so coming back to Home returns to it (ChannelsAdapter.focusLast). */
     private boolean channelFocused;
+    /** The Now playing pill and the session it shows (NowPlaying section below). */
+    private TextView btnNowPlaying;
+    private android.media.session.MediaController playing;
+    private boolean sessionsListening;
     private View weatherView;
     private TextView weatherTemp, weatherCondition;
     private WeatherIcon weatherIcon;
@@ -383,6 +389,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             date.setPadding(0, (int) (4 * density), 0, 0);
         }
         weatherOn = Weather.enabled(this);
+        quotes = quotesOn();
+        if (quotes && !festive) {
+            // A sentence reads as one in sentence case: no capitals or wide tracking, and a little larger.
+            greeting.setAllCaps(false);
+            greeting.setLetterSpacing(0.01f);
+            greeting.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+            greeting.setTypeface(getResources().getFont(R.font.bevietnam_light));
+        }
         weatherView = findViewById(R.id.weather);
         weatherTemp = findViewById(R.id.weatherTemp);
         weatherCondition = findViewById(R.id.weatherCondition);
@@ -408,8 +422,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
              */
             @Override
             protected void calculateExtraLayoutSpace(@NonNull RecyclerView.State state, @NonNull int[] extra) {
-                extra[0] = getHeight();
-                extra[1] = getHeight();
+                // Half a screen each way is enough to keep the channel rows laid out on the way back up, and binds
+                // a screen less of rows, nested lists and posters than a whole screen each way did.
+                extra[0] = getHeight() / 2;
+                extra[1] = getHeight() / 2;
             }
 
             @Override
@@ -562,6 +578,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
 
         btnInputs = findViewById(R.id.btnInputs);
+        btnNowPlaying = findViewById(R.id.btnNowPlaying);
+        btnNowPlaying.setOnClickListener(v -> openPlaying());
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> {
             // Something was just plugged in: the pill offers it, one press switches to it.
@@ -591,7 +609,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // jump to a tile far below when there is nothing in that direction.
         boolean rtlMenuBar = getResources().getBoolean(R.bool.rtl_menu_bar);
         if (liquidGlass) {
-            for (View pill : new View[]{btnInputs, btnWifi, btnSettings, btnReorder}) pill.setBackground(liquidPill(pill));
+            for (View pill : new View[]{btnNowPlaying, btnInputs, btnWifi, btnSettings, btnReorder}) pill.setBackground(liquidPill(pill));
         }
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
@@ -601,13 +619,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 focusTile(lastFocused % COLUMNS);
                 return true;
             }
-            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : R.id.btnWifi;
+            int firstButton = btnNowPlaying.getVisibility() == View.VISIBLE ? R.id.btnNowPlaying
+                    : btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : R.id.btnWifi;
             int leftButton = rtlMenuBar ? R.id.btnSettings : firstButton;
             int rightButton = rtlMenuBar ? firstButton : R.id.btnSettings;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == leftButton;
             return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == rightButton;
         };
         btnInputs.setOnKeyListener(pillKeys);
+        btnNowPlaying.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
@@ -703,6 +723,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         updateWifiLabel();
         updateInputsButton();
         if (showStats) startStats();
+        listenSessions(true);
         if (weatherOn) {
             showWeather(Weather.cached(this));
             Weather.refresh(this, handler, this::showWeather);
@@ -803,6 +824,115 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         });
     }
 
+    // ---- now playing ---------------------------------------------------------------------------
+
+    private final android.media.session.MediaSessionManager.OnActiveSessionsChangedListener sessionsChanged =
+            this::pickPlaying;
+    private final android.media.session.MediaController.Callback playingCallback =
+            new android.media.session.MediaController.Callback() {
+                @Override public void onPlaybackStateChanged(android.media.session.PlaybackState state) { showPlaying(); }
+                @Override public void onMetadataChanged(android.media.MediaMetadata metadata) { showPlaying(); }
+                @Override public void onSessionDestroyed() { pickPlaying(null); }
+            };
+
+    /**
+     * Listens to other apps' media sessions while Home is in front, so the pill can say what is playing (a cast from
+     * the phone, AirPlay, music left running). Needs MediaListener allowed once over adb; without it, nothing shows.
+     */
+    private void listenSessions(boolean on) {
+        android.media.session.MediaSessionManager msm = getSystemService(android.media.session.MediaSessionManager.class);
+        if (msm == null) return;
+        ComponentName me = new ComponentName(this, MediaListener.class);
+        try {
+            if (on && !sessionsListening) {
+                msm.addOnActiveSessionsChangedListener(sessionsChanged, me, handler);
+                sessionsListening = true;
+                pickPlaying(msm.getActiveSessions(me));
+            } else if (!on && sessionsListening) {
+                msm.removeOnActiveSessionsChangedListener(sessionsChanged);
+                sessionsListening = false;
+                if (playing != null) playing.unregisterCallback(playingCallback);
+                playing = null;
+            }
+        } catch (SecurityException e) {
+            sessionsListening = false;   // the listener is not allowed: no pill
+        }
+    }
+
+    /** The session to show: one playing, else one paused; never this launcher's own. */
+    private void pickPlaying(List<android.media.session.MediaController> sessions) {
+        if (sessions == null) {
+            android.media.session.MediaSessionManager msm = getSystemService(android.media.session.MediaSessionManager.class);
+            try {
+                sessions = msm == null ? null : msm.getActiveSessions(new ComponentName(this, MediaListener.class));
+            } catch (SecurityException e) {
+                sessions = null;
+            }
+        }
+        android.media.session.MediaController best = null;
+        if (sessions != null) {
+            for (android.media.session.MediaController c : sessions) {
+                if (getPackageName().equals(c.getPackageName())) continue;
+                int st = c.getPlaybackState() == null ? 0 : c.getPlaybackState().getState();
+                if (st == android.media.session.PlaybackState.STATE_PLAYING) { best = c; break; }
+                if (st == android.media.session.PlaybackState.STATE_PAUSED && best == null) best = c;
+            }
+        }
+        if (playing != null && (best == null || !playing.getSessionToken().equals(best.getSessionToken()))) {
+            playing.unregisterCallback(playingCallback);
+            playing = null;
+        }
+        if (best != null && playing == null) {
+            playing = best;
+            playing.registerCallback(playingCallback, handler);
+        }
+        showPlaying();
+    }
+
+    private void showPlaying() {
+        android.media.session.PlaybackState ps = playing == null ? null : playing.getPlaybackState();
+        int st = ps == null ? 0 : ps.getState();
+        android.media.MediaMetadata md = playing == null ? null : playing.getMetadata();
+        CharSequence title = md == null ? null : md.getText(android.media.MediaMetadata.METADATA_KEY_DISPLAY_TITLE);
+        if (title == null && md != null) title = md.getText(android.media.MediaMetadata.METADATA_KEY_TITLE);
+        boolean show = title != null && title.length() > 0
+                && (st == android.media.session.PlaybackState.STATE_PLAYING || st == android.media.session.PlaybackState.STATE_PAUSED);
+        if (!show) {
+            if (btnNowPlaying.hasFocus()) btnInputs.requestFocus();
+            btnNowPlaying.setVisibility(View.GONE);
+            return;
+        }
+        btnNowPlaying.setText(title);
+        btnNowPlaying.setAlpha(st == android.media.session.PlaybackState.STATE_PAUSED ? 0.7f : 1f);
+        CharSequence app;
+        try {
+            app = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(playing.getPackageName(), 0));
+        } catch (Exception e) {
+            app = playing.getPackageName();
+        }
+        btnNowPlaying.setContentDescription(getString(R.string.now_playing, title, app));
+        btnNowPlaying.setVisibility(View.VISIBLE);
+    }
+
+    /** Back to what is playing: the session's own screen, else the app. */
+    private void openPlaying() {
+        if (playing == null) return;
+        android.app.PendingIntent pi = playing.getSessionActivity();
+        if (pi != null) {
+            try {
+                android.app.ActivityOptions o = android.app.ActivityOptions.makeBasic();
+                if (Build.VERSION.SDK_INT >= 34) {
+                    o.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                }
+                pi.send(this, 0, null, null, null, null, o.toBundle());
+                return;
+            } catch (Exception ignored) { }
+        }
+        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(playing.getPackageName());
+        if (i == null) i = getPackageManager().getLaunchIntentForPackage(playing.getPackageName());
+        if (i != null) open(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    }
+
     /** The glyph, "28°" and the condition above the date; gone without an answer. */
     private void showWeather(Weather.Now now) {
         if (now == null) {
@@ -839,6 +969,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
         stopStats();
+        listenSessions(false);
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
@@ -2068,7 +2199,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
     }
 
+    /** The "greeting_quotes" switch: config.json overrides config.xml. */
+    private boolean quotesOn() {
+        org.json.JSONObject json = Config.theme(this);
+        boolean def = getResources().getBoolean(R.bool.greeting_quotes);
+        return json == null ? def : json.optBoolean("greeting_quotes", def);
+    }
+
+    /** Today's line of encouragement, the same all day; the list comes round again after its last one. */
+    private String quoteOfTheDay() {
+        String[] q = getResources().getStringArray(R.array.quotes);
+        if (q.length == 0) return "";
+        java.time.LocalDate d = java.time.LocalDate.now();
+        return "\u201C" + q[(int) Math.floorMod(d.toEpochDay(), (long) q.length)] + "\u201D";
+    }
+
     private void updateGreeting() {
+        if (quotes && !festive) {
+            // Set once a minute with the clock like the greeting; the text only changes at midnight.
+            String q = quoteOfTheDay();
+            if (!q.contentEquals(greeting.getText())) greeting.setText(q);
+            if (shamsi) shamsiDate.setText(Shamsi.today());
+            return;
+        }
         int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         int res;
         if (hour < 5) res = R.string.good_night;

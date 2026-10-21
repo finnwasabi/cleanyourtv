@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Now playing: three level bars, as a music app shows a playing track. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp" android:height="22dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M5.5,10h0a1.5,1.5 0,0 1,1.5 1.5v6a1.5,1.5 0,0 1,-3 0v-6a1.5,1.5 0,0 1,1.5 -1.5zM12,5h0a1.5,1.5 0,0 1,1.5 1.5v11a1.5,1.5 0,0 1,-3 0v-11a1.5,1.5 0,0 1,1.5 -1.5zM18.5,8h0a1.5,1.5 0,0 1,1.5 1.5v8a1.5,1.5 0,0 1,-3 0v-8a1.5,1.5 0,0 1,1.5 -1.5z" />
+</vector>

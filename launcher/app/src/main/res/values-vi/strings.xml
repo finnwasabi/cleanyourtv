@@ -3,6 +3,7 @@
     <string name="app_name">Màn hình chính</string>
     <string name="inputs">Nguồn vào</string>
     <string name="input_ready">%1$s đã kết nối</string>
+    <string name="now_playing">%1$s, đang phát trên %2$s</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Cài đặt</string>
     <string name="choose_input">Nguồn vào</string>
@@ -97,4 +98,26 @@
     <string name="weather_rain">Có mưa</string>
     <string name="weather_heavy_rain">Mưa to</string>
     <string name="weather_storm">Dông</string>
+    <string-array name="quotes">
+        <item>Mỗi ngày một bước nhỏ.</item>
+        <item>Có công mài sắt, có ngày nên kim.</item>
+        <item>Chậm mà chắc.</item>
+        <item>Nước chảy đá mòn.</item>
+        <item>Kiến tha lâu cũng đầy tổ.</item>
+        <item>Thất bại là mẹ thành công.</item>
+        <item>Bắt đầu từ chỗ bạn đang đứng.</item>
+        <item>Làm xong còn hơn làm hoàn hảo.</item>
+        <item>Tiến chậm vẫn là tiến.</item>
+        <item>Nghỉ một chút, rồi đi tiếp.</item>
+        <item>Hôm nay là ngày tốt để bắt đầu.</item>
+        <item>Đi một ngày đàng, học một sàng khôn.</item>
+        <item>Bạn đã từng vượt qua chuyện khó hơn.</item>
+        <item>Mỗi người giỏi đều từng là người mới.</item>
+        <item>Làm cho đơn giản, rồi làm cho tốt hơn.</item>
+        <item>Một việc một lúc thôi.</item>
+        <item>Hãy tử tế với chính mình hôm nay.</item>
+        <item>Áp lực tạo nên kim cương.</item>
+        <item>Muốn đi xa, hãy đi cùng nhau.</item>
+        <item>Cứ đi rồi sẽ đến.</item>
+    </string-array>
 </resources>

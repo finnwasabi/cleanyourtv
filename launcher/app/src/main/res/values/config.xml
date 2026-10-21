@@ -166,6 +166,9 @@
     <!-- The current weather beside the date, from Open-Meteo (no key): one small request at most every 30 minutes
          while Home is open. weather_location is "latitude,longitude". Theme keys: "weather", "weather_location". -->
     <bool name="weather">true</bool>
+    <!-- A short line of encouragement in place of the time-of-day greeting, a new one each day (quotes in
+         strings.xml). Theme key "greeting_quotes". -->
+    <bool name="greeting_quotes">true</bool>
     <string name="weather_location" translatable="false"></string>
 
     <!-- Time-of-day backdrop behind everything: a dark gradient that follows the clock, with a warm

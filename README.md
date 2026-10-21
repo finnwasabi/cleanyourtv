@@ -27,7 +27,7 @@
 
 The `wanbo-x7` branch adds poster rows for the preview channels apps publish ("Continue watching",
 YouTube recommendations) between the dock and the app grid, and a `liquid_glass` theme
-([`themes/liquid-glass/`](themes/liquid-glass/)), the weather above the date, a Watch Next row across apps (`@watch_next` in `channel_rows`), and an Inputs pill that offers an HDMI source the moment it connects. All are optional keys, documented in [`themes/`](themes/README.md#keys).
+([`themes/liquid-glass/`](themes/liquid-glass/)), the weather above the date, a Watch Next row across apps (`@watch_next` in `channel_rows`), an Inputs pill that offers an HDMI source the moment it connects, a Now playing pill for what another app plays (needs `cmd notification allow_listener com.gathin.tvhome/com.gathin.tvhome.MediaListener 0` once), a quote of the day in place of the greeting (`greeting_quotes`), posters cached on disk, and long names that slide by once after a moment of focus. All are optional keys, documented in [`themes/`](themes/README.md#keys).
 
 Measured on 21 October 2026 against Projectivy Launcher 4.71, the launcher it replaced. The TV is a
 Wanbo X7 Pro Max projector: Google TV 14, MediaTek MT9676, Mali-G52, 1.8 GB RAM, 32-bit userspace. The
@@ -84,7 +84,7 @@ screenshots pulled from the TV. With this repo as context it takes about fifteen
 - **The rest of your apps in a grid** that slides up when you press Down.
 - **One floating glass highlight** that springs from tile to tile. The focused tile lifts and shows its name.
 - **Three frosted buttons**: Inputs (HDMI ports under the names you gave them in the TV's settings, AV, Live TV), Wi-Fi or Ethernet with the network name, Settings.
-- **A greeting, a thin clock and the date** in [Outfit](https://fonts.google.com/specimen/Outfit), and a matching Clock screensaver. Set `show_stats` in config or a theme for one line under the clock: CPU, free memory and free storage. It stays off unless you turn it on, and it refreshes only while Home is on screen.
+- **A greeting, a thin clock and the date** in [Be Vietnam Pro](https://fonts.google.com/specimen/Be+Vietnam+Pro) (this fork; upstream uses Outfit, whose Vietnamese marks sit badly), subset to Latin and Vietnamese, and a matching Clock screensaver. Set `show_stats` in config or a theme for one line under the clock: CPU, free memory and free storage. It stays off unless you turn it on, and it refreshes only while Home is on screen.
 - **Themes** that change colours, wallpaper, dock and columns without a rebuild, and **module cards** that let other apps plug a tile in, only with your say-so.
 
 And a TV that stops working against you: no sponsored rows, no "Discover" nags, no analytics
@@ -465,5 +465,5 @@ Security issues: report them privately through the [Security tab](https://github
 
 ## Licence
 
-MIT, see [`LICENSE`](LICENSE). The Outfit typeface is under the SIL Open Font License, see
+MIT, see [`LICENSE`](LICENSE). The Be Vietnam Pro typeface is under the SIL Open Font License, see
 `launcher/FONT-LICENSE-OFL.txt`.
