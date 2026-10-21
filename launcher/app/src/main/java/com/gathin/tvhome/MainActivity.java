@@ -615,6 +615,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnNowPlaying.setOnClickListener(v -> openPlaying());
         // Just the level bars until focused: spelled out, the pill took the room the date and the weather need.
         btnNowPlaying.setOnFocusChangeListener((v, has) -> fillNowPlaying());
+        // The level bars at 18dp, for the 32dp pill.
+        android.graphics.drawable.Drawable bars = getDrawable(R.drawable.ic_now_playing);
+        if (bars != null) {
+            int sz = Math.round(18 * density);
+            bars.setBounds(0, 0, sz, sz);
+            btnNowPlaying.setCompoundDrawablesRelative(bars, null, null, null);
+        }
         // Clipped to its own pill shape, which follows the bounds as they grow, so the text is uncovered inside
         // rounded ends the whole way (a rectangular clip squared off the right end until it settled).
         btnNowPlaying.setOutlineProvider(pillOutline);
@@ -648,25 +655,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // jump to a tile far below when there is nothing in that direction.
         boolean rtlMenuBar = getResources().getBoolean(R.bool.rtl_menu_bar);
         if (liquidGlass) {
-            for (View pill : new View[]{btnNowPlaying, btnInputs, btnWifi, btnSettings, btnReorder}) pill.setBackground(liquidPill(pill));
+            for (View pill : new View[]{btnInputs, btnWifi, btnSettings, btnReorder}) pill.setBackground(liquidPill(pill));
+            btnNowPlaying.setBackground(liquidPill(btnNowPlaying, 16));
         }
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                // Up to the Now playing pill above the menu, when something plays.
+                if (btnNowPlaying.getVisibility() == View.VISIBLE) btnNowPlaying.requestFocus();
+                return true;
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
                 focusTile(lastFocused % COLUMNS);
                 return true;
             }
-            int firstButton = btnNowPlaying.getVisibility() == View.VISIBLE ? R.id.btnNowPlaying
-                    : btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : R.id.btnWifi;
+            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : R.id.btnWifi;
             int leftButton = rtlMenuBar ? R.id.btnSettings : firstButton;
             int rightButton = rtlMenuBar ? firstButton : R.id.btnSettings;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == leftButton;
             return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == rightButton;
         };
         btnInputs.setOnKeyListener(pillKeys);
-        btnNowPlaying.setOnKeyListener(pillKeys);
+        // The pill above the menu: Down returns to the menu pill under it, nothing else leaves it.
+        btnNowPlaying.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                (rtlMenuBar ? btnInputs.getVisibility() == View.VISIBLE ? btnInputs : btnWifi : btnSettings).requestFocus();
+                return true;
+            }
+            return keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
+        });
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
@@ -966,7 +986,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 btnNowPlaying.setVisibility(View.VISIBLE);
                 return;
             }
-            if (btnNowPlaying.hasFocus()) btnInputs.requestFocus();
+            if (btnNowPlaying.hasFocus()) findViewById(R.id.btnSettings).requestFocus();
             btnNowPlaying.setVisibility(View.GONE);
             return;
         }
@@ -989,16 +1009,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 grow.setDuration(reducedMotion ? 120 : 260);
                 grow.setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f));
                 // The header only (the pills and the clock block beside them): the grid never takes part.
-                android.transition.TransitionManager.beginDelayedTransition((ViewGroup) btnNowPlaying.getParent().getParent(), grow);
+                android.transition.TransitionManager.beginDelayedTransition((ViewGroup) btnNowPlaying.getParent(), grow);
             }
             btnNowPlaying.setText(want);
         }
-        // Closed: TopButtonIcon's even 10dp, a 42dp circle with the glyph in its middle. Open: TopButton's 16/20dp.
-        int start = Math.round((open ? 16 : 10) * density), end = Math.round((open ? 20 : 10) * density);
+        // Closed: a 32dp circle, the 18dp glyph in its middle (7dp each side). Open: 12/14dp, like the menu pills.
+        int start = Math.round((open ? 12 : 7) * density), end = Math.round((open ? 14 : 7) * density);
         if (btnNowPlaying.getPaddingStart() != start || btnNowPlaying.getPaddingEnd() != end) {
             btnNowPlaying.setPaddingRelative(start, btnNowPlaying.getPaddingTop(), end, btnNowPlaying.getPaddingBottom());
         }
-        int pad = open ? Math.round(9 * density) : 0;
+        int pad = open ? Math.round(7 * density) : 0;
         if (btnNowPlaying.getCompoundDrawablePadding() != pad) btnNowPlaying.setCompoundDrawablePadding(pad);
     }
 
@@ -2062,8 +2082,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     }
 
     /** pill_bg as liquid glass: the focused pill stays solid white, as in pill_bg, the rest show the frost. */
-    private android.graphics.drawable.Drawable liquidPill(View pill) {
-        float r = 21 * density;
+    private android.graphics.drawable.Drawable liquidPill(View pill) { return liquidPill(pill, 21); }
+
+    /** A pill's glass background, with ends of {@code radiusDp} (half its height: 21dp for the 42dp menu pills). */
+    private android.graphics.drawable.Drawable liquidPill(View pill, float radiusDp) {
+        float r = radiusDp * density;
         android.graphics.drawable.GradientDrawable focused = new android.graphics.drawable.GradientDrawable();
         focused.setColor(0xF5FFFFFF);
         focused.setCornerRadius(r);
