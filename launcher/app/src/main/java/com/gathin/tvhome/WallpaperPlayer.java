@@ -81,7 +81,7 @@ final class WallpaperPlayer {
      */
     private void showFirst() {
         String previous = preferences.getString("image", "");
-        File first = WallpaperRotation.find(files, previous);
+        File first = byTime() ? WallpaperRotation.byHour(files, hourNow()) : WallpaperRotation.find(files, previous);
         if (first == null) first = WallpaperRotation.pick(files, previous, order, random);
         while (first != null) {
             Bitmap small = decodeSmall(first);
@@ -124,6 +124,28 @@ final class WallpaperPlayer {
         }
     }
 
+    private boolean byTime() { return WallpaperRotation.ORDER_TIME.equals(order); }
+
+    private static int hourNow() { return java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY); }
+
+    /** The next picture over the one on screen in 1.2 s, then alone: a change of light, not a cut. */
+    private void crossfadeTo(Bitmap next) {
+        android.graphics.drawable.Drawable now = image.getDrawable();
+        if (now == null) {
+            image.setImageBitmap(next);
+            return;
+        }
+        android.graphics.drawable.BitmapDrawable to = new android.graphics.drawable.BitmapDrawable(root.getResources(), next);
+        android.graphics.drawable.TransitionDrawable fade =
+                new android.graphics.drawable.TransitionDrawable(new android.graphics.drawable.Drawable[]{now, to});
+        fade.setCrossFadeEnabled(false);
+        image.setImageDrawable(fade);
+        fade.startTransition(1200);
+        root.postDelayed(() -> {
+            if (image.getDrawable() == fade) image.setImageBitmap(next);
+        }, 1300);
+    }
+
     /** An eighth of the screen's size, for Backdrop and the first frame; null when the file is unreadable. */
     private Bitmap decodeSmall(File file) {
         try {
@@ -162,7 +184,11 @@ final class WallpaperPlayer {
         String previous = preferences.getString("image", "");
         File selected = WallpaperRotation.find(files, previous);
         long changed = preferences.getLong("changed", 0);
-        if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
+        if (byTime()) {
+            // Checked every minute with the clock; a new picture only when its hour has come.
+            File timed = WallpaperRotation.byHour(files, hourNow());
+            if (timed != null) selected = timed;
+        } else if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
             selected = WallpaperRotation.pick(files, previous, order, random);
         }
         if (selected == null || selected.getName().equals(displayed)) return;
@@ -188,7 +214,7 @@ final class WallpaperPlayer {
                     return;
                 }
                 Backdrop.set(small, width, height);
-                image.setImageBitmap(bitmap);
+                crossfadeTo(bitmap);
                 displayed = next.getName();
                 if (!displayed.equals(previous) || changed == 0) {
                     preferences.edit().putString("image", displayed)

@@ -19,7 +19,7 @@ powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 th
 | `dussehra/` | Festive skin for Dussehra (ends 21 Oct 2026): a marigold toran, a faint gold rangoli, a diya for Wi-Fi, a bell for Inputs, a marigold for Settings and a petal shower |
 | `scenes/` | 14 dark illustrated landscapes in `wallpapers/`, a new one every hour; drawn from code by `tools/scenes_wallpapers.py` |
 | `six-columns/` | Six smaller tiles per row and one grid row visible under the dock |
-| `liquid-glass/` | `liquid_glass` on over deep black with the glowing rims of two glass discs rising from the lower right (blue, violet, rose; drawn by `wallpaper.py`): the dock band, the top pills and the Inputs panel become frosted glass that picks up their light |
+| `liquid-glass/` | `liquid_glass` on over deep black with the glowing rims of two glass discs rising from the lower right (drawn by `wallpaper.py`), in three moods by the time of day (`wallpapers/`: day from 06:00, rose and amber dusk from 17:00, a dimmer deep-blue night from 22:00): the dock band, the top pills and the Inputs panel become frosted glass that picks up their light |
 | `silk/` | The same glass over translucent dark silk ribbons (ink, deep blue, violet and plum; drawn by `wallpaper.py`) |
 
 ## Keys
@@ -63,6 +63,7 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `sky_intensity` | 0 to 100 | Time-of-day backdrop: a dark gradient that follows the clock, 0 hides it (default) |
 | `wallpaper` | bool | Show `wallpaper.jpg` from the theme folder (`true`), or ignore it (`false`) |
 | `wallpaper_rotation_minutes` | 0 to 1440 | Rotate images in the theme's `wallpapers/` folder at this interval; 0 keeps the single-image behaviour. A negative or non-numeric value is ignored, and 0 means "no rotation", not "every minute" |
+| `wallpaper_order` | `shuffle`, `sequential` or `time_of_day` | How `wallpapers/` rotates. `time_of_day` (this fork): each file's name starts with the hour it takes over, `06-day.jpg`, `17-dusk.jpg`, `22-night.jpg`, and it fades in over 1.2 s when that hour comes; the one with the latest hour also covers the early morning |
 | `wallpaper_order` | `shuffle` or `sequential` | How a collection advances. `shuffle` (the default, and what launchers did before this key existed) avoids repeating the current picture; `sequential` walks the folder in filename order and wraps at the end. An unknown value falls back to `shuffle` |
 | `wallpaper_dim` | 0 to 90 | Black overlay over wallpaper images, in percent; 0 by default and no shade view at all |
 | `festival` | string | Turns on a festive skin: the network pill becomes a diya whose flame follows the connection, Inputs a temple bell, Settings a marigold, and the first Home of the day gets a petal shower. `dussehra` and `diwali` have built-in greetings |
