@@ -358,6 +358,12 @@ final class Config {
         }
     }
 
+    /** The theme's config.json, parsed (BOM and all), or null: for the keys read outside Config. */
+    static JSONObject theme(Context ctx) {
+        File dir = dir(ctx);
+        return dir == null ? null : read(new File(dir, FILE_NAME));
+    }
+
     /** Reads and parses the overlay; any problem means "no overlay", never a crash on the home screen. */
     private static JSONObject read(File file) {
         if (file == null || !file.isFile()) return null;

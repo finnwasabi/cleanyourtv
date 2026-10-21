@@ -9,11 +9,7 @@ import android.view.View;
 
 import org.json.JSONObject;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
 import java.lang.ref.WeakReference;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -36,17 +32,8 @@ final class Backdrop {
 
     /** The "liquid_glass" key of the theme's config.json (off when the theme does not set it). */
     static boolean enabled(Context ctx) {
-        File dir = Config.dir(ctx);
-        File file = dir == null ? null : new File(dir, Config.FILE_NAME);
-        if (file == null || !file.isFile() || file.length() > 64 * 1024) return false;
-        try (InputStream in = new FileInputStream(file)) {
-            byte[] buf = new byte[(int) file.length()];
-            int n = 0, r;
-            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
-            return new JSONObject(new String(buf, 0, n, StandardCharsets.UTF_8)).optBoolean("liquid_glass", false);
-        } catch (Exception e) {
-            return false;
-        }
+        JSONObject json = Config.theme(ctx);
+        return json != null && json.optBoolean("liquid_glass", false);
     }
 
     /** A view whose background shows the backdrop; it is redrawn whenever the wallpaper changes. */

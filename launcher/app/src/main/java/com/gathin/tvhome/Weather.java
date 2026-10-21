@@ -6,12 +6,9 @@ import android.content.SharedPreferences;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,19 +66,7 @@ final class Weather {
         }
     }
 
-    private static JSONObject theme(Context ctx) {
-        File dir = Config.dir(ctx);
-        File file = dir == null ? null : new File(dir, Config.FILE_NAME);
-        if (file == null || !file.isFile() || file.length() > 64 * 1024) return null;
-        try (InputStream in = new FileInputStream(file)) {
-            byte[] buf = new byte[(int) file.length()];
-            int n = 0, r;
-            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
-            return new JSONObject(new String(buf, 0, n, StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            return null;
-        }
-    }
+    private static JSONObject theme(Context ctx) { return Config.theme(ctx); }
 
     private static SharedPreferences prefs(Context ctx) {
         return ctx.getSharedPreferences("weather", Context.MODE_PRIVATE);
@@ -96,9 +81,16 @@ final class Weather {
     }
 
     /** Fetches the current weather off the main thread when the last answer is older than REFRESH_MS. */
+    /** When the last request went out: a failed one is tried again after RETRY_MS, not on the next minute. */
+    private static long lastTry;
+    private static final long RETRY_MS = 5 * 60 * 1000L;
+
     static void refresh(Context ctx, android.os.Handler main, Callback cb) {
         Now last = cached(ctx);
-        if (last != null && System.currentTimeMillis() - last.at < REFRESH_MS) return;
+        long now0 = System.currentTimeMillis();
+        if (last != null && now0 - last.at < REFRESH_MS) return;
+        if (now0 - lastTry < RETRY_MS) return;
+        lastTry = now0;
         double[] loc = location(ctx);
         if (loc == null) return;
         Context app = ctx.getApplicationContext();

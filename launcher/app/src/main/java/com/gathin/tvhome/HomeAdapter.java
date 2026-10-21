@@ -15,7 +15,8 @@ import androidx.recyclerview.widget.RecyclerView;
 final class HomeAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_CHANNEL = 100;
     private static final int TYPE_TITLE = 101;
-    private static final long TITLE_ID = Long.MIN_VALUE;
+    /** Not Long.MIN_VALUE: AppAdapter gives the library pill that id. */
+    private static final long TITLE_ID = Long.MIN_VALUE + 1;
 
     private final AppAdapter apps;
     private final ChannelsAdapter channels;

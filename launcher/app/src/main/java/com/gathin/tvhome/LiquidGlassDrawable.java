@@ -49,6 +49,14 @@ final class LiquidGlassDrawable extends Drawable {
     /** Bumped when the size or the wallpaper changes, so a render started before that is thrown away. */
     private int generation;
     private Bitmap shown;
+    /** The place most recently asked for; queued renders for older places are dropped. */
+    private volatile long wanted;
+
+    /** Marks {@code key} as the place to draw next, queued or not; always true, to sit in a condition. */
+    private boolean want(long key) {
+        wanted = key;
+        return true;
+    }
     private final Paint blit = new Paint(Paint.FILTER_BITMAP_FLAG);
     /** Every glass surface alive, so trimAll can drop their caches when Android runs short of memory. */
     private static final java.util.Set<LiquidGlassDrawable> ALL =
@@ -107,7 +115,9 @@ final class LiquidGlassDrawable extends Drawable {
         if (cacheW != b.width() || cacheH != b.height() || cacheBackdrop != bd) {
             cache.clear();
             pending.clear();
-            shown = null;
+            // A new wallpaper at the same size: the old frost stands in while the new one renders off the main
+            // thread. Only a new size has nothing to show and draws on this thread, once.
+            if (cacheW != b.width() || cacheH != b.height()) shown = null;
             cacheW = b.width();
             cacheH = b.height();
             cacheBackdrop = bd;
@@ -119,10 +129,15 @@ final class LiquidGlassDrawable extends Drawable {
                 // First draw: nothing to stand in, so draw this one now (once per size and wallpaper).
                 hit = render(new Rect(b), loc[0], loc[1], bd);
                 cache.put(key, hit);
-            } else if (pending.add(key)) {
+            } else if (want(key) && pending.add(key)) {
                 final Rect rb = new Rect(b);
                 final int lx = loc[0], ly = loc[1], gen = generation;
                 RENDERER.execute(() -> {
+                    // A glide passes many places; only the newest one asked for is worth drawing.
+                    if (key != wanted) {
+                        host.post(() -> pending.remove(key));
+                        return;
+                    }
                     Bitmap done = render(rb, lx, ly, bd);
                     host.post(() -> {
                         pending.remove(key);
