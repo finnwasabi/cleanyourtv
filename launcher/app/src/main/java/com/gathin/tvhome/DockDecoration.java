@@ -25,11 +25,19 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private final int bandAlpha, edgeAlpha;
     private final RectF last = new RectF();
 
-    /** @param translucent the cinematic shelf's band: the artwork and the glow show through it. */
-    DockDecoration(int dockSize, float density, boolean translucent, View glassHost) {
+    /** Extra band below the tiles for their names (always_show_names), in px. */
+    private final float namesRoom;
+
+    /**
+     * @param translucent the cinematic shelf's band: the artwork and the glow show through it.
+     * @param names       the dock tiles show their names, so the band reaches down over them.
+     * @param glassHost   the view a liquid glass band is drawn in (theme key liquid_glass); null for the flat band.
+     */
+    DockDecoration(int dockSize, float density, boolean translucent, boolean names, View glassHost) {
         this.glass = glassHost == null ? null : new LiquidGlassDrawable(glassHost, 26 * density, density, 0x1FFFFFFF);
         this.dockSize = dockSize;
         this.density = density;
+        this.namesRoom = names ? 22 * density : 0;
         band.setColor(translucent ? 0x8C121014 : 0xFF141416);
         edge.setStyle(Paint.Style.STROKE);
         edge.setStrokeWidth(density);
@@ -92,6 +100,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         // 1dp edge line, inside the grid; the top and bottom have room.
         float side = Math.max(0f, Math.min(pad, Math.min(rect.left, parent.getWidth() - rect.right) - density));
         rect.inset(-side, -pad);
+        rect.bottom += namesRoom;
         float radius = 26 * density;
         if (fade <= 0f) return;
         if (glass != null) {
