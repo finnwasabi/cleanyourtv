@@ -174,6 +174,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             new android.media.AudioManager.AudioPlaybackCallback() {
                 @Override public void onPlaybackConfigChanged(List<android.media.AudioPlaybackConfiguration> configs) {
                     showPlaying();
+                    // Android keeps calling music "active" for a moment after a player stops; ask again then.
+                    handler.removeCallbacks(recheckPlaying);
+                    handler.postDelayed(recheckPlaying, 1500);
+                }
+            };
+    private final Runnable recheckPlaying = () -> showPlaying();
+    private final android.view.ViewOutlineProvider pillOutline = new android.view.ViewOutlineProvider() {
+                @Override public void getOutline(View v, android.graphics.Outline o) {
+                    o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), v.getHeight() / 2f);
                 }
             };
     /** When the channel rows were last read; Home open for long reads them again every CHANNELS_REFRESH_MS. */
@@ -332,6 +341,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 channels.refresh();
                 channelsReadAt = System.currentTimeMillis();
             }
+            if (btnNowPlaying.getVisibility() == View.VISIBLE) showPlaying();   // a missed stop
             if (weatherOn) {
                 showWeather(Weather.cached(MainActivity.this));   // hides an answer gone stale
                 Weather.refresh(MainActivity.this, handler, MainActivity.this::showWeather);
@@ -605,6 +615,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnNowPlaying.setOnClickListener(v -> openPlaying());
         // Just the level bars until focused: spelled out, the pill took the room the date and the weather need.
         btnNowPlaying.setOnFocusChangeListener((v, has) -> fillNowPlaying());
+        // Clipped to its own pill shape, which follows the bounds as they grow, so the text is uncovered inside
+        // rounded ends the whole way (a rectangular clip squared off the right end until it settled).
+        btnNowPlaying.setOutlineProvider(pillOutline);
+        btnNowPlaying.setClipToOutline(true);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> {
             // Something was just plugged in: the pill offers it, one press switches to it.
@@ -972,7 +986,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             // widens) and the pills beside it slide over. Bounds and clip only, no layout pass per frame.
             if (animations && btnNowPlaying.getVisibility() == View.VISIBLE && btnNowPlaying.isLaidOut()) {
                 android.transition.ChangeBounds grow = new android.transition.ChangeBounds();
-                grow.setResizeClip(true);
                 grow.setDuration(reducedMotion ? 120 : 260);
                 grow.setInterpolator(new android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f));
                 // The header only (the pills and the clock block beside them): the grid never takes part.
@@ -980,7 +993,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             }
             btnNowPlaying.setText(want);
         }
-        int pad = open ? Math.round(8 * density) : 0;
+        // Closed: TopButtonIcon's even 10dp, a 42dp circle with the glyph in its middle. Open: TopButton's 16/20dp.
+        int start = Math.round((open ? 16 : 10) * density), end = Math.round((open ? 20 : 10) * density);
+        if (btnNowPlaying.getPaddingStart() != start || btnNowPlaying.getPaddingEnd() != end) {
+            btnNowPlaying.setPaddingRelative(start, btnNowPlaying.getPaddingTop(), end, btnNowPlaying.getPaddingBottom());
+        }
+        int pad = open ? Math.round(9 * density) : 0;
         if (btnNowPlaying.getCompoundDrawablePadding() != pad) btnNowPlaying.setCompoundDrawablePadding(pad);
     }
 
