@@ -150,6 +150,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private TextView raceKicker, raceHeadline, raceSessions;
     /** config.xml show_stats, overridable by a theme. Off: the line is gone and nothing is read. */
     private boolean showStats;
+    /** The weather beside the date (Weather), when "weather" is on. */
+    private boolean weatherOn;
+    private TextView weatherView;
+    private WeatherIcon weatherIcon;
     private boolean shamsi;
     /** greeting_name: said after the greeting, which is shown in capitals. */
     private String greetingName = "";
@@ -284,6 +288,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
+            if (weatherOn) Weather.refresh(MainActivity.this, handler, MainActivity.this::showWeather);
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -358,6 +363,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             TextView date = findViewById(R.id.date);
             date.setTextSize(11f);
             date.setPadding(0, (int) (4 * density), 0, 0);
+        }
+        weatherOn = Weather.enabled(this);
+        weatherView = findViewById(R.id.weather);
+        if (weatherOn) {
+            weatherIcon = new WeatherIcon(Math.round(20 * density), 0xE6FFFFFF);
+            weatherView.setCompoundDrawablesRelative(weatherIcon, null, null, null);
+            showWeather(Weather.cached(this));
         }
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
@@ -647,6 +659,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         updateWifiLabel();
         updateInputsButton();
         if (showStats) startStats();
+        if (weatherOn) {
+            showWeather(Weather.cached(this));
+            Weather.refresh(this, handler, this::showWeather);
+        }
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
@@ -740,6 +756,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             tilesReady = true;
             showCardPrompt();
         });
+    }
+
+    /**
+     * The glyph and "28°", as a lock screen widget shows it; the condition in words is read out by TalkBack only,
+     * since the line has no room for it beside a long date. Gone without an answer.
+     */
+    private void showWeather(Weather.Now now) {
+        if (now == null) {
+            weatherView.setVisibility(View.GONE);
+            return;
+        }
+        weatherIcon.setKind(Weather.kind(now.code, now.day));
+        weatherView.setText(now.temp + "°");
+        weatherView.setContentDescription(now.temp + "°, " + getString(Weather.label(now.code)));
+        weatherView.setVisibility(View.VISIBLE);
     }
 
     @Override

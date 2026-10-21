@@ -69,6 +69,8 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `cinematic_home` | bool | Cinematic top shelf: the focused dock app's artwork, softened, fills the top of the screen in its colour, with a larger name, "Last opened" (apps opened from Home), dock position dots, a focus glow in the app's colour and a translucent dock band; off by default |
 | `liquid_glass` | bool | Frosted glass surfaces (dock band, focus glass, top pills, Inputs panel) that show a blurred copy of `wallpaper.jpg` behind them. The wallpaper is blurred once at 1/8 size and each surface is cached and drawn off the main thread, so it costs no blur per frame; without a wallpaper it falls back to a plain tint. Off unless set |
 | `channel_rows` | list of strings | Preview channels other apps publish to the TV provider (YouTube recommendations, a player's "Continue watching") as poster rows between the dock and the app grid, in this order: `"package"` for every channel of that app, `"package=Channel name"` for one. An empty list shows every browsable preview channel. Needs `pm grant com.gathin.tvhome android.permission.READ_TV_LISTINGS` once |
+| `weather` | bool | The current weather after the date: a glyph and the temperature, from Open-Meteo (no key, no account), fetched at most every 30 minutes while Home is open and never in the background. Off unless set |
+| `weather_location` | `"latitude,longitude"` | Where `weather` is for, e.g. `"48.8566,2.3522"` |
 
 ## Wallpapers
 
