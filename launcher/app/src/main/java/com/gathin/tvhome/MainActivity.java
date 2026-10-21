@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -52,6 +53,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.SoundEffectConstants;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
 import android.view.animation.LayoutAnimationController;
@@ -102,6 +104,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
      */
     private static final long TIME_VALID_AFTER_MS = 1_735_689_600_000L;
     private String liveTvPkg;
+    /** Idle time on Home before ClockActivity; 0 is off (config.xml, home_idle_clock_minutes). */
+    private long idleClockMs;
+    private final Runnable showIdleClock = () -> startActivity(new Intent(this, ClockActivity.class));
     private String liveTvAction;
     private String inputAction;
     private String sourcePanelService;
@@ -126,6 +131,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private LinearLayout heroDots;
     /** Cinematic top shelf (config.xml, cinematic_home): the focused dock app's artwork behind a larger shelf. */
     private boolean cinematic;
+    /** config.xml ambient_glow, overridable by a theme. Off: the glow view is gone and no fade or colour animator
+     *  is started for it, so a focus move costs nothing extra on a launcher that runs all day. */
+    private boolean ambientGlow;
     private ImageView heroArt;
     private static final float HERO_ART_ALPHA = 0.5f;
     /** Softened artwork per app (HeroArt, about 5 KB each), made the first time its dock tile is focused. */
@@ -143,6 +151,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private View clockBlock;
     private View btnInputs;
     private TextView btnWifi;
+    /** The network pill's icon as last set, so a refresh that changes nothing does not lay the top bar out again. */
+    private int wifiIcon;
+    /** The pills have been filled in once; later resumes refresh them after the first frame. */
+    private boolean pillsShown;
     private TextView shamsiDate;
     private TextView stats;
     private List<RaceWeekend.Race> raceCalendar;
@@ -235,6 +247,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean promptsPaused;
     /** Rebuild the tiles on resume: Home was fully hidden by an app, or Home was pressed. Not after a side panel such as Wi-Fi settings. */
     private boolean rebuildOnResume = true;
+    /** Between onStop and onStart: Home was fully covered by an app, not just by the translucent quick panel. */
+    private boolean stopped;
+    /** Between onStart and onStop: Home is (at least partly) on screen. */
+    private boolean started;
     /** The Inputs or Module cards dropdown while one is open, so onPause can close it. */
     private PopupWindow openPopup;
     /** Reorder mode is on (top-bar button). */
@@ -363,6 +379,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
         liveTvPkg = cfg.liveTvPackage;
+        idleClockMs = cfg.homeIdleClockMinutes * MINUTE_MS;
         liveTvAction = cfg.liveTvAction;
         inputAction = cfg.inputAction;
         sourcePanelService = cfg.sourcePanelService;
@@ -383,6 +400,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
+        ambientGlow = cfg.ambientGlow;
+        if (!ambientGlow) ambient.setVisibility(View.GONE);
         heroName = findViewById(R.id.heroName);
         hero = findViewById(R.id.hero);
         // The hero is now a group (name, and the cinematic lines): without this every fade of the default
@@ -520,7 +539,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             }
         });
         if (dockRow) {
-            DockDecoration band = new DockDecoration(COLUMNS, density, cinematic, liquidGlass ? grid : null);
+            DockDecoration band = new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, liquidGlass ? grid : null);
             grid.addItemDecoration(band);
             gridFrame.setDock(band);
         }
@@ -644,6 +663,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnReorder = findViewById(R.id.btnReorder);
         btnReorder.setOnClickListener(v -> toggleReorder());
         btnReorder.setVisibility(cfg.reorderButton ? View.VISIBLE : View.GONE);
+        if (!cfg.showNetworkPill) btnWifi.setVisibility(View.GONE);
+        btnLibraryTop = findViewById(R.id.btnLibraryTop);
+        btnLibraryTop.setOnClickListener(v -> {
+            onLibraryRequested();
+            libraryFromTopBar = true;   // closing it goes back to this button, not to the pill after the last row
+        });
+        btnLibraryTop.setVisibility(cfg.libraryButton && cfg.appLibrary ? View.VISIBLE : View.GONE);
+        iconOnlyButtons = cfg.iconOnlyButtons;
+        wifiIconOnly = iconOnlyButtons && cfg.wifiLabelWidth <= 0;
+        if (iconOnlyButtons) {
+            if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
+            else makeIconOnly(btnWifi);
+            makeIconOnly((TextView) btnSettings);
+        }
         btnSettings.setOnLongClickListener(v -> {
             showSettingsMenu();
             return true;
@@ -668,7 +701,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 focusTile(lastFocused % COLUMNS);
                 return true;
             }
-            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : R.id.btnWifi;
+            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : firstTopButton().getId();
             int leftButton = rtlMenuBar ? R.id.btnSettings : firstButton;
             int rightButton = rtlMenuBar ? firstButton : R.id.btnSettings;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == leftButton;
@@ -688,7 +721,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
-        for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnSettings}) {
+        btnLibraryTop.setOnKeyListener(pillKeys);
+        for (View button : new View[]{btnInputs, btnWifi, btnReorder, btnLibraryTop, btnSettings}) {
             button.setOnFocusChangeListener((view, focused) -> {
                 if (!festive) fadePillText(view, focused);
                 if (advancedEffects) view.animate().scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
@@ -747,12 +781,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // jump to the top moved it out from under the glass.
         channelFocused = false;
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
-        rebuildOnResume = true;
+        if (stopped) {
+            rebuildOnResume = true;
+        } else {
+            // Still on screen (the quick panel was over it, or Home was already in front): the tiles are current,
+            // so only go back to the first one; rebuilding would replay the entrance animation for nothing.
+            grid.post(() -> focusTile(0));
+        }
     }
 
     @Override
     protected void onStart() {
         super.onStart();
+        stopped = false;
+        started = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
             registerReceiver(timeReceiver, timeFilter, Context.RECEIVER_NOT_EXPORTED);
@@ -775,7 +817,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             recreate();
             return;
         }
+        restartIdleClock();
         promptsPaused = false;
+        if (grid.getAdapter() == null) grid.setAdapter(home);   // dropped by onTrimMemory (home wraps adapter and the channel rows)
         if (rebuildOnResume) {
             tilesReady = false;
             reloadApps(true);
@@ -783,8 +827,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         rebuildOnResume = false;
         updateGreeting();
         updateRace();
-        updateWifiLabel();
-        updateInputsButton();
+        // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
+        // when the network or the inputs change, so this refresh only catches anything missed. Its binder calls
+        // (about 7 ms on a TCL C755, most of it WifiManager.getConnectionInfo) would hold up the first frame back
+        // on Home, so after the first resume it runs once that frame is drawn.
+        if (pillsShown) {
+            refreshPillsAfterNextDraw();
+        } else {
+            updateWifiLabel();
+            updateInputsButton();
+            pillsShown = true;
+        }
         if (showStats) startStats();
         listenSessions(true);
         if (weatherOn) {
@@ -863,8 +916,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         // An updated app may bring new artwork; the backdrop is cheap to make again.
         heroArtCache.clear();
         heroArtKey = null;
-        cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps, Cards.load(Cards.storeFile(this))), none) : none;
-        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none));
+        // One LEANBACK query for both the tiles and the card checks.
+        final List<ResolveInfo> leanback = getPackageManager().queryIntentActivities(
+                new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
+        cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps,
+                () -> Cards.load(Cards.storeFile(this)), leanback), none) : none;
+        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback);
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
     }
@@ -1010,22 +1067,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         weatherView.setVisibility(View.VISIBLE);
     }
 
-    /**
-     * Android is short of memory while Home is in the background (the 1.8 GB projector swaps with YouTube open):
-     * give back the poster and glass caches. The wallpaper stays, so Home comes back at once.
-     */
+
+    /** Any key on Home restarts the countdown to the idle clock. */
     @Override
-    public void onTrimMemory(int level) {
-        super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_BACKGROUND || level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL) {
-            if (channels != null) channels.trimMemory();
-            LiquidGlassDrawable.trimAll();
-        }
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        restartIdleClock();
+    }
+
+    private void restartIdleClock() {
+        root.removeCallbacks(showIdleClock);
+        if (idleClockMs > 0) root.postDelayed(showIdleClock, idleClockMs);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
         wallpaperPlayer.stop();
         stopAmbientAnimation();
@@ -1047,9 +1105,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     @Override
     protected void onStop() {
         super.onStop();
+        started = false;
         unregisterReceiver(packageReceiver);
         unregisterReceiver(timeReceiver);
         handler.removeCallbacks(clockCheck);
+        stopped = true;
+        rebuildOnResume = true;
+    }
+
+    /**
+     * Another app needs the memory while Home is in the background: let go of every tile's artwork, and
+     * rebuild it when Home comes back. Not at UI_HIDDEN, the ordinary trip to an app, where keeping the
+     * tiles is what makes the return instant.
+     */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        // RUNNING_LOW and CRITICAL also arrive while Home is visible when an accessibility service keeps the
+        // process in the foreground; never blank the screen the owner is looking at.
+        boolean due = level >= TRIM_MEMORY_BACKGROUND
+                || level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL;
+        if (!due) return;
+        // The poster and glass caches go even while Home is on screen: only images not being drawn are dropped.
+        if (channels != null) channels.trimMemory();
+        LiquidGlassDrawable.trimAll();
+        if (started) return;
+        adapter.clear();
+        // Detach the adapter too: with Home stopped no layout pass runs, so the tile views (and the bitmaps
+        // they hold) would stay attached until Home comes back. setAdapter(null) recycles them now.
+        grid.setAdapter(null);
+        grid.getRecycledViewPool().clear();
+        heroArtCache.clear();
+        heroArtKey = null;
         rebuildOnResume = true;
     }
 
@@ -1369,9 +1456,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         if (appLibrary != null) appLibrary.close();
         if (openPopup != null) openPopup.dismiss();
         libraryFocusPending = false;
+        libraryFromTopBar = false;
         appLibrary = new AppLibraryDialog(this, animations, reducedMotion, adapter::containsPackage, () -> reloadApps(false), () -> {
             appLibrary = null;
             openPopup = null;
+            if (libraryFromTopBar) {
+                libraryFromTopBar = false;
+                btnLibraryTop.requestFocus();
+                return;
+            }
             libraryFocusPending = true;
             grid.post(() -> {
                 if (libraryFocusPending && appLibrary == null && hasWindowFocus() && !isFinishing()) focusLibrary();
@@ -1501,15 +1594,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             hero.setY(y);
             hero.setTranslationX(0f);
             hero.setAlpha(1f);
-            setAmbient(color);
-            if (!animations) {
-                ambient.setAlpha(1f);
-                heroShown = true;
-            } else if (!heroShown) {
-                ambient.setAlpha(0f);
-                ambient.animate().alpha(1f).setDuration(160).start();
-                heroShown = true;
+            if (ambientGlow) {
+                setAmbient(color);
+                if (!animations) {
+                    ambient.setAlpha(1f);
+                } else if (!heroShown) {
+                    ambient.setAlpha(0f);
+                    ambient.animate().alpha(1f).setDuration(160).start();
+                }
             }
+            heroShown = true;
             return;
         }
 
@@ -1521,8 +1615,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             hero.setY(y);
             hero.setTranslationX(0f);
             hero.animate().alpha(1f).setDuration(260).start();
-            setAmbient(color);
-            ambient.animate().alpha(1f).setDuration(600).start();
+            if (ambientGlow) {
+                setAmbient(color);
+                ambient.animate().alpha(1f).setDuration(600).start();
+            }
             heroShown = true;
         } else if (changed) {
             if (advancedEffects) hero.animate().cancel();
@@ -1532,9 +1628,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 hero.setTranslationX(12 * density);
                 hero.animate().alpha(1f).translationX(0f).setDuration(200).start();
             }).start();
-            if (advancedEffects) {
+            if (ambientGlow && advancedEffects) {
                 transitionAmbient(color);
-            } else if (color != ambientColor) {
+            } else if (ambientGlow && color != ambientColor) {
                 ambient.animate().alpha(0.35f).setDuration(200).withEndAction(() -> {
                     setAmbient(color);
                     ambient.animate().alpha(1f).setDuration(500).start();
@@ -1749,6 +1845,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         heroArt.animate().cancel();
         heroArt.setAlpha(0f);
         heroShown = false;
+        if (!ambientGlow) return;
         if (!animations || reducedMotion) {
             setAmbient(color);
             ambient.setAlpha(1f);
@@ -1774,7 +1871,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         heroShown = false;
         if (animations) {
             hero.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
-            ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
+            if (ambientGlow) ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
             heroArt.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();
         } else {
             hero.setAlpha(0f);
@@ -1829,7 +1926,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         statsThread.quit();
         statsThread = null;
         statsBg = null;
-        stats.setVisibility(View.GONE);
+        // Paused (the quick panel or an app on top): keep the last line on screen. Taking it away moved the grid up
+        // under a glass highlight that stayed put.
+        if (!showStats) stats.setVisibility(View.GONE);
     }
 
     /** One quiet line, e.g. "CPU 8%  ·  Memory 430 MB free  ·  Storage 3.1 GB free". Runs off the main thread. */
@@ -2164,8 +2263,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
     }
 
+    /** The first top-bar button after Inputs that is shown: the network pill, Reorder, then Settings (always there). */
+    private View firstTopButton() {
+        if (btnWifi.getVisibility() == View.VISIBLE) return btnWifi;
+        if (btnReorder.getVisibility() == View.VISIBLE) return btnReorder;
+        return findViewById(R.id.btnSettings);
+    }
+
     @Override public void onLibraryUp() {
-        if (adapter.appCount() == 0) { btnWifi.requestFocus(); return; }
+        if (adapter.appCount() == 0) { firstTopButton().requestFocus(); return; }
         int lastRow = ((adapter.appCount() - 1) / COLUMNS) * COLUMNS;
         focusTile(Math.min(lastRow + lastFocused % COLUMNS, adapter.appCount() - 1));
     }
@@ -2223,7 +2329,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         if (channels != null) channels.cancelPendingScroll();   // a row still gliding in must not take focus back
         if (adapter.appCount() == 0) {
             if (adapter.isLibraryAt(0)) focusLibrary();
-            else btnWifi.requestFocus();
+            else firstTopButton().requestFocus();
             return;
         }
         final int pos = adapter.focusablePosition(Math.max(0, Math.min(position, adapter.appCount() - 1)));
@@ -2373,6 +2479,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         racePanel.setVisibility(View.VISIBLE);
     }
 
+    private void refreshPillsAfterNextDraw() {
+        root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                root.getViewTreeObserver().removeOnPreDrawListener(this);
+                // Posted from inside the frame's traversal, so it runs after that frame is drawn. A post straight
+                // from onResume would run first: the frame is only scheduled after onResume returns.
+                handler.post(() -> {
+                    if (isDestroyed()) return;
+                    updateWifiLabel();
+                    updateInputsButton();
+                });
+                return true;
+            }
+        });
+        root.invalidate();   // a resume that changes nothing on screen still draws once, so the refresh runs
+    }
+
     /** Shows the Wi-Fi network name on the button when we can read it, otherwise the connection type. */
     private void updateWifiLabel() {
         String text = getString(R.string.wifi);
@@ -2436,17 +2560,44 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             text = name.length() < text.length() && name.length() < 5 ? "" : name;
             SpannableString label = new SpannableString(text + " " + badge);
             label.setSpan(span, text.length() + 1, label.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            btnWifi.setText(label);
-        } else {
+            if (!TextUtils.equals(btnWifi.getText(), label)) btnWifi.setText(label);
+        } else if (!TextUtils.equals(btnWifi.getText(), text)) {
             btnWifi.setText(text);
+        }
+        if (wifiIconOnly) {
+            btnWifi.setContentDescription(btnWifi.getText());
+            btnWifi.setText(null);
         }
         if (festive && diya != null) {
             if (online && flame == 0) flame = 3;   // online some other way (cellular, USB tethering)
             diya.setSteady(steady);
             diya.setFlame(flame);
         } else {
-            btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
+            if (icon != wifiIcon) {
+                wifiIcon = icon;
+                btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
+            }
         }
+    }
+
+    /** config.xml icon_only_buttons. */
+    private boolean iconOnlyButtons;
+    /** icon_only_buttons without wifi_label_width: the Wi-Fi pill shows no network name. */
+    private boolean wifiIconOnly;
+    /** The app library button in the top bar (library_button). */
+    private View btnLibraryTop;
+    /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
+    private boolean libraryFromTopBar;
+
+    /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
+    private void makeIconOnly(TextView pill) {
+        pill.setContentDescription(pill.getText());
+        pill.setText(null);
+        pill.setMaxWidth(Integer.MAX_VALUE);
+        int pad = Math.round(10 * density);
+        pill.setPaddingRelative(pad, 0, pad, 0);
+        pill.setCompoundDrawablePadding(0);
+        pill.getLayoutParams().width = Math.round(42 * density);
     }
 
     // ---- festive skin ------------------------------------------------------------------------------
@@ -2749,7 +2900,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 // The name given in Settings > Inputs (e.g. "MacBook Pro") goes first, the port after it.
                 if (named) label = custom + " \u00B7 " + label;
                 final String id = info.getId();
-                int state = hdmi && hdmiStateBogus ? -1 : tim.getInputState(id);
+                // Analog AV jacks have no hotplug detection, and some TVs report them as always connected
+                // (TCL Smart TV Pro G03 says "Connected" with nothing plugged in), so AV rows show no state.
+                int state = !hdmi || hdmiStateBogus ? -1 : tim.getInputState(id);
                 addInputRow(rows, popup, hdmi ? R.drawable.ic_input : R.drawable.ic_av, label, state,
                         () -> openInput(id));
             }
