@@ -45,7 +45,7 @@
             android:ellipsize="end"
             android:textColor="#FFFFFFFF"
             android:textSize="13sp"
-            android:fontFamily="@font/outfit"
+            android:fontFamily="@font/bevietnam_regular"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -57,12 +57,11 @@
         android:layout_marginTop="108dp"
         android:gravity="center"
         android:singleLine="true"
-        android:ellipsize="marquee"
-        android:marqueeRepeatLimit="2"
+        android:ellipsize="end"
         android:alpha="0"
         android:translationY="-6dp"
         android:textColor="#F2FFFFFF"
         android:textSize="14sp"
-        android:fontFamily="@font/outfit_medium"
-        android:letterSpacing="0.02" />
+        android:fontFamily="@font/bevietnam_medium"
+        android:letterSpacing="0" />
 </FrameLayout>

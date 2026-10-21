@@ -80,6 +80,10 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     private final Map<Long, Integer> lastColumn = new HashMap<>();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService loader = BackgroundThreads.single("channels");
+    /** One pool of program cards for every row, so a row scrolled out hands its cards to the next one in. */
+    private final RecyclerView.RecycledViewPool cards = new RecyclerView.RecycledViewPool();
+    /** Posters downloaded before, kept on disk across restarts and memory trims. */
+    private final PosterDiskCache disk;
     private final ExecutorService posters = BackgroundThreads.pool(2, "posters");
     private boolean loading;
     /** Off (dock_row false): no rows load, so none show. */
@@ -100,6 +104,7 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
         this.animations = animations;
         this.reducedMotion = reducedMotion;
         this.density = ctx.getResources().getDisplayMetrics().density;
+        this.disk = new PosterDiskCache(ctx);
         setHasStableIds(true);
     }
 
@@ -255,7 +260,9 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
             list = v.findViewById(R.id.programs);
             indicator = v.findViewById(R.id.rowIndicator);
             layout.owner = this;
+            layout.setRecycleChildrenOnDetach(true);
             list.setLayoutManager(layout);
+            list.setRecycledViewPool(cards);
             list.setAdapter(programs);
             list.setItemAnimator(null);
             list.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -400,8 +407,6 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 poster = v.findViewById(R.id.poster);
                 fallback = v.findViewById(R.id.posterLabel);
                 name = v.findViewById(R.id.name);
-                // No fading edges on the scrolling name: they draw through an offscreen layer every frame.
-                name.setHorizontalFadingEdgeEnabled(false);
                 progressTrack = v.findViewById(R.id.progressTrack);
                 progress = v.findViewById(R.id.progress);
                 card.setOutlineProvider(new ViewOutlineProvider() {
@@ -457,12 +462,12 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 card.setScaleX(focused ? scale : 1f);
                 card.setScaleY(focused ? scale : 1f);
                 name.setAlpha(focused ? 1f : 0f);
-                name.setSelected(focused);
+                if (focused) NameScroller.start(name); else NameScroller.stop(name);
                 card.setOnClickListener(v -> open(row, p));
                 card.setOnFocusChangeListener((v, has) -> {
                     v.animate().cancel();
                     name.animate().cancel();
-                    name.setSelected(has);   // a long title scrolls by twice, as a tile's name does
+                    if (has) NameScroller.start(name); else NameScroller.stop(name);   // a long title slides by once
                     float s = has ? scale : 1f;
                     if (!animations) {
                         name.setAlpha(has ? 1f : 0f);
@@ -674,9 +679,21 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
     private byte[] read(String url) throws Exception {
         Uri uri = Uri.parse(url);
         String scheme = uri.getScheme() == null ? "" : uri.getScheme();
+        boolean web = scheme.equals("http") || scheme.equals("https");
+        if (web) {
+            byte[] kept = disk.get(url);
+            if (kept != null) return kept;
+            byte[] fresh = fetch(uri, url, true);
+            if (fresh != null) disk.put(url, fresh);
+            return fresh;
+        }
+        return fetch(uri, url, false);
+    }
+
+    private byte[] fetch(Uri uri, String url, boolean web) throws Exception {
         InputStream in;
         HttpURLConnection conn = null;
-        if (scheme.equals("http") || scheme.equals("https")) {
+        if (web) {
             conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(10000);

@@ -66,7 +66,7 @@
                 android:singleLine="true"
                 android:textColor="#B3FFFFFF"
                 android:textSize="12sp"
-                android:fontFamily="@font/outfit_medium"
+                android:fontFamily="@font/bevietnam_medium"
                 android:letterSpacing="0.22"
                 android:textAllCaps="true" />
         </LinearLayout>
@@ -79,7 +79,7 @@
             android:singleLine="true"
             android:textColor="#FFFFFFFF"
             android:textSize="34sp"
-            android:fontFamily="@font/outfit_light"
+            android:fontFamily="@font/bevietnam_light"
             android:letterSpacing="-0.01"
             android:includeFontPadding="false" />
 
@@ -91,7 +91,7 @@
             android:singleLine="true"
             android:textColor="#99FFFFFF"
             android:textSize="12sp"
-            android:fontFamily="@font/outfit_medium"
+            android:fontFamily="@font/bevietnam_medium"
             android:letterSpacing="0.12" />
     </LinearLayout>
 
@@ -119,7 +119,7 @@
             android:layout_height="wrap_content"
             android:textColor="#FFFFFFFF"
             android:textSize="48sp"
-            android:fontFamily="@font/outfit_light"
+            android:fontFamily="@font/bevietnam_light"
             android:letterSpacing="-0.02"
             android:includeFontPadding="false"
             android:singleLine="true" />
@@ -134,7 +134,7 @@
             android:singleLine="true"
             android:textColor="#B3FFFFFF"
             android:textSize="15sp"
-            android:fontFamily="@font/outfit_light"
+            android:fontFamily="@font/bevietnam_light"
             android:visibility="gone" />
 
         <LinearLayout
@@ -186,7 +186,7 @@
                     android:layout_marginStart="4dp"
                     android:textColor="#8CFFFFFF"
                     android:textSize="12sp"
-                    android:fontFamily="@font/outfit_medium"
+                    android:fontFamily="@font/bevietnam_medium"
                     android:letterSpacing="0.22"
                     android:textAllCaps="true" />
 
@@ -204,7 +204,7 @@
                         android:format24Hour="HH:mm"
                         android:textColor="#FFFFFFFF"
                         android:textSize="52sp"
-                        android:fontFamily="@font/outfit_light"
+                        android:fontFamily="@font/bevietnam_light"
                         android:letterSpacing="-0.04"
                         android:includeFontPadding="false" />
 
@@ -219,7 +219,7 @@
                         android:format24Hour=""
                         android:textColor="#B3FFFFFF"
                         android:textSize="15sp"
-                        android:fontFamily="@font/outfit_medium"
+                        android:fontFamily="@font/bevietnam_medium"
                         android:letterSpacing="0.08"
                         android:textAllCaps="true" />
 
@@ -250,7 +250,7 @@
                             android:ellipsize="end"
                             android:textColor="#E6FFFFFF"
                             android:textSize="17sp"
-                            android:fontFamily="@font/outfit_regular"
+                            android:fontFamily="@font/bevietnam_regular"
                             android:letterSpacing="0.02"
                             android:includeFontPadding="false"
                             android:visibility="gone" />
@@ -274,7 +274,7 @@
                                 android:singleLine="true"
                                 android:textColor="#F2FFFFFF"
                                 android:textSize="19sp"
-                                android:fontFamily="@font/outfit_regular"
+                                android:fontFamily="@font/bevietnam_regular"
                                 android:letterSpacing="0.01"
                                 android:includeFontPadding="false" />
 
@@ -287,7 +287,7 @@
                                 android:ellipsize="end"
                                 android:textColor="#A6FFFFFF"
                                 android:textSize="14sp"
-                                android:fontFamily="@font/outfit_regular"
+                                android:fontFamily="@font/bevietnam_regular"
                                 android:letterSpacing="0.14"
                                 android:textAllCaps="true"
                                 android:includeFontPadding="false" />
@@ -306,7 +306,7 @@
                             android:format24Hour="@string/date_format_home"
                             android:textColor="#A6FFFFFF"
                             android:textSize="14sp"
-                            android:fontFamily="@font/outfit_regular"
+                            android:fontFamily="@font/bevietnam_regular"
                             android:letterSpacing="0.14"
                             android:textAllCaps="true" />
                     </LinearLayout>
@@ -329,7 +329,7 @@
                 android:ellipsize="end"
                 android:textColor="#D9FFFFFF"
                 android:textSize="14sp"
-                android:fontFamily="@font/outfit_medium"
+                android:fontFamily="@font/bevietnam_medium"
                 android:letterSpacing="0.04"
                 android:focusable="false"
                 android:visibility="gone" />
@@ -344,6 +344,17 @@
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:orientation="horizontal">
+
+                <!-- What another app is playing (MediaSession), shown only while it plays or is paused. -->
+                <TextView
+                    android:id="@+id/btnNowPlaying"
+                    style="@style/TopButton"
+                    android:maxWidth="320dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:drawableStart="@drawable/ic_now_playing"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
 
                 <TextView
                     android:id="@+id/btnInputs"
