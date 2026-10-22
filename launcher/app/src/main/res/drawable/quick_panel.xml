@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- glass_panel without its see-through: the quick settings card sits over the Home pills and over video,
+     and without window blur (off on the Wanbo X7) whatever is behind showed through as ghost text. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="270" android:startColor="#FF2A2A2E" android:endColor="#FF161618" />
+    <stroke android:width="1dp" android:color="#33FFFFFF" />
+    <corners android:radius="20dp" />
+</shape>

@@ -37,7 +37,9 @@
     <string name="follow_theme">Theo theme (xóa lựa chọn trên TV)</string>
     <string name="follow_theme_hint">Dùng bố cục và hiệu ứng của theme hiện tại hoặc mặc định. Đẩy hoặc đặt lại theme cũng xóa các lựa chọn bạn đã chọn trên TV.</string>
     <string name="tv_settings">Cài đặt hệ thống TV</string>
-    <string name="quick_picture">Hiển thị</string>
+    <string name="quick_picture">Hình ảnh</string>
+    <string name="quick_settings_title">Cài đặt nhanh</string>
+    <string name="quick_sound">Âm thanh</string>
     <string name="quick_network">Mạng</string>
     <string name="quick_apps">Ứng dụng</string>
     <string name="quick_apps_hint">Bật lại</string>
