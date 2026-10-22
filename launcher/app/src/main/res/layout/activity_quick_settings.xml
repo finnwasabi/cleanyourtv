@@ -11,7 +11,7 @@
         android:layout_width="280dp"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical|end"
-        android:layout_marginEnd="56dp"
+        android:layout_marginEnd="28dp"
         android:orientation="vertical"
         android:background="@drawable/quick_panel"
         android:padding="6dp"
