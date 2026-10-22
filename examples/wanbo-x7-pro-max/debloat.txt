@@ -1,0 +1,45 @@
+# Wanbo X7 Pro Max projector: ro.product.model X7_Pro_Max, device coorg, built by SDMC, MediaTek MT9676
+# (merak, 4x Cortex-A55), about 1.8 GB RAM, 32-bit userspace only (armeabi-v7a APKs).
+# Google TV 14 (API 34), build UKN6.260116.148, security patch 2026-08-01. Tested in Vietnam.
+#
+# Apply:   TV_HOST=<tv ip> tools/disable.sh examples/wanbo-x7-pro-max/debloat.txt
+# Undo:    TV_HOST=<tv ip> tools/restore.sh examples/wanbo-x7-pro-max/debloat.txt com.google.android.apps.tv.launcherx
+# Check:   TV_HOST=<tv ip> tools/check.py examples/wanbo-x7-pro-max/debloat.txt com.gathin.tvhome
+# Everything is DISABLED, not uninstalled. Comment out any line you want to keep.
+#
+# Disabled between 2026-10-10 and 2026-10-21 and lived with since, with this fork's launcher on Home.
+#
+# Stock launcher: com.google.android.apps.tv.launcherx. Disable setupwraith first: with launcherx off and
+# setupwraith on, Home lands on setupwraith's RecoveryActivity.
+# Disabling setupwraith deletes the Wi-Fi network saved during first setup and the projector drops off
+# the network (ADB with it). Rejoin from the projector's own Wi-Fi settings so the network belongs to
+# android.uid.system, and check before disabling: `dumpsys wifi | grep -o 'cname=[^ ]*'`.
+# Kept on purpose: com.google.android.katniss (Assistant and the remote's mic),
+# com.google.android.apps.mediashell (Chromecast), com.google.android.tv.remote.service (phone remote),
+# com.mediatek.tv.settings (the picture menu; ACTION_DISPLAY_SETTINGS opens it).
+# No tuner on a projector, so the three MediaTek tuner inputs go; the one HDMI port is com.mediatek.tis.
+# Also removed with `pm uninstall -k --user 0`, so not in this list: iQIYI and HBO Max.
+
+# Setup and the stock home (order matters, see above)
+com.google.android.tungsten.setupwraith        # first-run setup; its RecoveryActivity also claims HOME
+com.google.android.apps.tv.launcherx           # Google TV home, replaced
+
+# Google extras
+com.google.android.play.games                  # Play Games
+com.google.android.feedback                    # Google feedback reporter
+com.android.tv.feedbackconsent                 # feedback consent screen
+
+# Privacy Sandbox and on-device ML, unused on a projector
+com.android.adservices.api                     # ad services (Topics, attribution)
+com.android.ondevicepersonalization.services   # on-device personalization
+com.android.federatedcompute.services          # federated learning
+com.android.healthconnect.controller           # Health Connect UI
+
+# MediaTek and SDMC
+com.mediatek.tv.retaildemo                     # store demo mode
+mediatek.factorymenu.ui                        # factory menu UI
+com.mediatek.miracast                          # Miracast receiver; Chromecast and AirPlay apps cover casting
+com.mediatek.tv.oneworld.tvcenter              # MediaTek TV center for broadcast TV
+com.mediatek.dtv.tvinput.dvbtuner              # DVB tuner input, no tuner fitted
+com.mediatek.dtv.tvinput.atsctuner             # ATSC tuner input, no tuner fitted
+com.mediatek.dtv.tvinput.isdbtuner             # ISDB tuner input, no tuner fitted
