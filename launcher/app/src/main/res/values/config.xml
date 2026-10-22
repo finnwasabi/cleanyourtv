@@ -275,6 +275,10 @@
     <!-- A short line of encouragement in place of the time-of-day greeting, a new one each day (quotes in
          strings.xml). Theme key "greeting_quotes". -->
     <bool name="greeting_quotes">true</bool>
+    <!-- Switches Wireless debugging back on after every restart and Wi-Fi reconnect (Android turns it off), so the
+         paired computer can reach the TV without anyone opening Developer options. Needs
+         pm grant com.gathin.tvhome android.permission.WRITE_SECURE_SETTINGS once; does nothing without it. -->
+    <bool name="keep_wireless_debugging">true</bool>
     <!-- Receivers that play without a session Home can read (AirPlay audio): while music plays and no session names
          it, the Now playing pill says "Playing through" the first one installed here. -->
     <string-array name="audio_receivers" translatable="false">

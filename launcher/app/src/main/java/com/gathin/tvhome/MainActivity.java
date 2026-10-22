@@ -307,6 +307,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         @Override
         public void onAvailable(@NonNull Network network) {
             handler.post(MainActivity.this::updateWifiLabel);
+            // Android switches Wireless debugging off when Wi-Fi drops; back on once a network is up again.
+            handler.post(() -> WirelessDebugging.ensure(MainActivity.this));
         }
 
         @Override
@@ -913,6 +915,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
         restartIdleClock();
         promptsPaused = false;
+        WirelessDebugging.ensure(this);
         if (grid.getAdapter() == null) grid.setAdapter(home);   // dropped by onTrimMemory (home wraps adapter and the channel rows)
         switch (tileRefresh.onResume(packagesChangedSinceRebuild())) {
             case REBUILD:
