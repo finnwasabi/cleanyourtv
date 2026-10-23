@@ -35,6 +35,24 @@ public class WallpaperRotationTest {
         assertTrue(WallpaperRotation.validOrder(WallpaperRotation.ORDER_TIME));
     }
 
+    @Test
+    public void timeOfDayHoursNeedTwoDigitsAndMidnightCounts() {
+        assertEquals(0, WallpaperRotation.startHour("00-night.jpg"));
+        assertEquals(6, WallpaperRotation.startHour("06.jpg"));
+        assertEquals(23, WallpaperRotation.startHour("23-late.webp"));
+        assertEquals(-1, WallpaperRotation.startHour("6-day.jpg"));
+        assertEquals(-1, WallpaperRotation.startHour("06"));
+        assertEquals(-1, WallpaperRotation.startHour("dusk-17.jpg"));
+        assertEquals(-1, WallpaperRotation.startHour(null));
+        List<File> images = Arrays.asList(new File("12-day.jpg"), new File("00-night.jpg"));
+        assertEquals("00-night.jpg", WallpaperRotation.byHour(images, 0).getName());
+        assertEquals("00-night.jpg", WallpaperRotation.byHour(images, 11).getName());
+        assertEquals("12-day.jpg", WallpaperRotation.byHour(images, 12).getName());
+        // Two pictures for one hour: the first listed (images() sorts by name) keeps it.
+        List<File> twins = Arrays.asList(new File("06-a.jpg"), new File("06-b.jpg"));
+        assertEquals("06-a.jpg", WallpaperRotation.byHour(twins, 9).getName());
+    }
+
     private static File touch(File dir, String name, int bytes) throws IOException {
         File f = new File(dir, name);
         try (FileOutputStream out = new FileOutputStream(f)) {
