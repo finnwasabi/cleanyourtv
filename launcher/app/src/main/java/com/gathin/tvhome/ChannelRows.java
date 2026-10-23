@@ -30,9 +30,10 @@ import java.util.Map;
  */
 final class ChannelRows {
     private static final String TAG = "TvHome.Channels";
-    private static final Uri CHANNELS = Uri.parse("content://android.media.tv/channel");
-    private static final Uri PROGRAMS = Uri.parse("content://android.media.tv/preview_program");
-    private static final Uri WATCH_NEXT = Uri.parse("content://android.media.tv/watch_next_program");
+    // Parsed where they are queried, so loading this class runs no Android code (ChannelRowsTest).
+    private static final String CHANNELS = "content://android.media.tv/channel";
+    private static final String PROGRAMS = "content://android.media.tv/preview_program";
+    private static final String WATCH_NEXT = "content://android.media.tv/watch_next_program";
     static final String WATCH_NEXT_KEY = "@watch_next";
     /** The Watch Next row's id: channel ids start at 1. */
     static final long WATCH_NEXT_ID = 0;
@@ -132,7 +133,7 @@ final class ChannelRows {
         List<long[]> order = new ArrayList<>();
         List<Program> found = new ArrayList<>();
         Map<String, Integer> perApp = new HashMap<>();
-        try (Cursor c = ctx.getContentResolver().query(WATCH_NEXT,
+        try (Cursor c = ctx.getContentResolver().query(Uri.parse(WATCH_NEXT),
                 new String[]{"_id", "package_name", "title", "episode_title", "season_display_number",
                         "episode_display_number", "poster_art_uri", "thumbnail_uri", "poster_art_aspect_ratio",
                         "intent_uri", "last_playback_position_millis", "duration_millis", "browsable",
@@ -187,7 +188,7 @@ final class ChannelRows {
             }
             break;
         }
-        try (Cursor c = ctx.getContentResolver().query(CHANNELS,
+        try (Cursor c = ctx.getContentResolver().query(Uri.parse(CHANNELS),
                 new String[]{"_id", "package_name", "display_name", "type", "browsable"}, null, null, null)) {
             if (c == null) return Collections.emptyList();
             while (c.moveToNext()) {
@@ -216,7 +217,7 @@ final class ChannelRows {
         if (byId.isEmpty()) return rows;   // the Watch Next row alone
         Map<Long, Integer> weights = new HashMap<>();
 
-        try (Cursor c = ctx.getContentResolver().query(PROGRAMS,
+        try (Cursor c = ctx.getContentResolver().query(Uri.parse(PROGRAMS),
                 new String[]{"_id", "channel_id", "title", "episode_title", "season_display_number",
                         "episode_display_number", "poster_art_uri", "thumbnail_uri", "poster_art_aspect_ratio",
                         "intent_uri", "last_playback_position_millis", "duration_millis", "browsable", "weight"},
