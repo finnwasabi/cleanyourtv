@@ -64,4 +64,20 @@ public class WeatherTest {
         assertEquals(R.string.weather_clear, Weather.label(0));
         assertEquals(R.string.weather_cloudy, Weather.label(3));
     }
+
+    @Test
+    public void aLocationIsRoundedToOneDecimalBeforeItGoesOut() {
+        assertEquals(48.9, Weather.rounded(48.8566), 0);
+        assertEquals(2.4, Weather.rounded(2.3522), 0);
+        assertEquals(-33.9, Weather.rounded(-33.8688), 0);
+    }
+
+    @Test
+    public void anEmptyOrMalformedLocationIsNoLocation() {
+        assertEquals(null, Weather.parse(""));
+        assertEquals(null, Weather.parse("  "));
+        assertEquals(null, Weather.parse("48.85"));
+        assertEquals(null, Weather.parse("91,0"));
+        assertEquals(48.8566, Weather.parse("48.8566, 2.3522")[0], 0);
+    }
 }
