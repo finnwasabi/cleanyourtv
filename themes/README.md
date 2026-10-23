@@ -19,8 +19,8 @@ powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 th
 | `dussehra/` | Festive skin for Dussehra (ends 21 Oct 2026): a marigold toran, a faint gold rangoli, a diya for Wi-Fi, a bell for Inputs, a marigold for Settings and a petal shower | <img src="dussehra/screenshot.jpg" width="320" alt="dussehra theme"> |
 | `scenes/` | 14 dark illustrated landscapes in `wallpapers/`, a new one every hour; drawn from code by `tools/scenes_wallpapers.py` | <img src="scenes/screenshot.jpg" width="320" alt="scenes theme"> |
 | `six-columns/` | Six smaller tiles per row and one grid row visible under the dock | <img src="six-columns/screenshot.jpg" width="320" alt="six-columns theme"> |
-| `liquid-glass/` | `liquid_glass` on over deep black with the glowing rims of two glass discs rising from the lower right (drawn by `wallpaper.py`), in three moods by the time of day (`wallpapers/`: day from 06:00, rose and amber dusk from 17:00, a dimmer deep-blue night from 22:00): the dock band, the top pills and the Inputs panel become frosted glass that picks up their light | |
-| `silk/` | The same glass over translucent dark silk ribbons (ink, deep blue, violet and plum; drawn by `wallpaper.py`) | |
+| `liquid-glass/` | `liquid_glass` on over deep black with the glowing rims of two glass discs rising from the lower right (drawn by `wallpaper.py`), in three moods by the time of day (`wallpapers/`: day from 06:00, rose and amber dusk from 17:00, a dimmer deep-blue night from 22:00): the dock band, the top pills and the Inputs panel become frosted glass that picks up their light | <img src="liquid-glass/screenshot.jpg" width="320" alt="liquid-glass theme"> |
+| `silk/` | The same glass over translucent dark silk ribbons (ink, deep blue, violet and plum; drawn by `wallpaper.py`) | <img src="silk/screenshot.jpg" width="320" alt="silk theme"> |
 
 Every theme folder except `liquid-glass/` and `silk/` has a `screenshot.jpg` of Home with that theme on a real TV. `tools/theme.sh` never
 pushes it; it is only here so you can see a theme before you try it.
