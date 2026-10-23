@@ -20,7 +20,12 @@ final class PosterDiskCache {
     private final File dir;
 
     PosterDiskCache(Context ctx) {
-        dir = new File(ctx.getCacheDir(), "posters");
+        this(new File(ctx.getCacheDir(), "posters"));
+    }
+
+    /** Kept in {@code dir}; PosterDiskCacheTest passes a temporary folder. */
+    PosterDiskCache(File dir) {
+        this.dir = dir;
     }
 
     /** The cached bytes for {@code url}, or null. */
@@ -74,7 +79,8 @@ final class PosterDiskCache {
         }
     }
 
-    private static String key(String url) {
+    /** The file name {@code url} is kept under: its SHA-1 in hex. */
+    static String key(String url) {
         try {
             byte[] d = MessageDigest.getInstance("SHA-1").digest(url.getBytes("UTF-8"));
             StringBuilder sb = new StringBuilder(40);

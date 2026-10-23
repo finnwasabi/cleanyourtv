@@ -118,7 +118,11 @@ final class WallpaperPlayer {
                     Bitmap shown = full == null ? null : onGpu(full);
                     root.post(() -> {
                         loading = false;
-                        if (closed || shown == null || !sharp.getName().equals(displayed)) return;
+                        if (closed || shown == null || !sharp.getName().equals(displayed)) {
+                            // As update() does: a screen of graphics memory back now, not at some later GC.
+                            if (shown != null) shown.recycle();
+                            return;
+                        }
                         android.graphics.drawable.TransitionDrawable fade = new android.graphics.drawable.TransitionDrawable(
                                 new android.graphics.drawable.Drawable[]{
                                         new android.graphics.drawable.BitmapDrawable(root.getResources(), small),
