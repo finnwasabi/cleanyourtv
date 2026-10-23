@@ -21,8 +21,11 @@
     <!-- YaOS (Yandex TV OS): HDMI, AV and the tuner all play in com.yandex.tv.live, whose activities require
          this permission (protection level normal, so it is granted at install). Ignored on other TVs. -->
     <uses-permission android:name="yandex.tv.permission.ACCESS_TV_SOURCE" />
-    <!-- keep_wireless_debugging (WirelessDebugging): switches Wireless debugging back on after a restart. A development
-         permission, never granted at install: only pm grant from adb gives it, and without it nothing happens. -->
+    <!-- Two uses, both through Settings.Secure. restore_key_services (ServiceRepair): puts the remote's accessibility
+         helpers back after a force stop of this app took them off the enabled list. keep_wireless_debugging
+         (WirelessDebugging): switches Wireless debugging back on after a restart. A development permission, never
+         granted at install: only pm grant from adb gives it (build-and-install with RESTORE_KEY_SERVICES=1), and
+         without it nothing happens. -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 
