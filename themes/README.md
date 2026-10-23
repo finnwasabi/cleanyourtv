@@ -22,7 +22,7 @@ powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 th
 | `liquid-glass/` | `liquid_glass` on over deep black with the glowing rims of two glass discs rising from the lower right (drawn by `wallpaper.py`), in three moods by the time of day (`wallpapers/`: day from 06:00, rose and amber dusk from 17:00, a dimmer deep-blue night from 22:00): the dock band, the top pills and the Inputs panel become frosted glass that picks up their light | <img src="liquid-glass/screenshot.jpg" width="320" alt="liquid-glass theme"> |
 | `silk/` | The same glass over translucent dark silk ribbons (ink, deep blue, violet and plum; drawn by `wallpaper.py`) | <img src="silk/screenshot.jpg" width="320" alt="silk theme"> |
 
-Every theme folder except `liquid-glass/` and `silk/` has a `screenshot.jpg` of Home with that theme on a real TV. `tools/theme.sh` never
+Every theme folder except `silk/` has a `screenshot.jpg` of Home with that theme on a real TV. `tools/theme.sh` never
 pushes it; it is only here so you can see a theme before you try it.
 
 ## Keys
