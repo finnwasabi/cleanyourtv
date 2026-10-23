@@ -55,7 +55,7 @@ public final class QuickSettingsActivity extends Activity {
         addRow(rows, R.drawable.ic_settings, getString(R.string.tv_settings), null,
                 SystemSettings.intent(this, Settings.ACTION_SETTINGS));
         picture.requestFocus();
-        slideIn(findViewById(R.id.panel), Config.load(this).reducedMotion);
+        slideIn(findViewById(R.id.panel), reducedMotion());
     }
 
     /** Settings pressed again while the panel is up. */
@@ -127,6 +127,17 @@ public final class QuickSettingsActivity extends Activity {
         Intent tv = new Intent(ACTION_TV_SOUND);
         if (getPackageManager().resolveActivity(tv, PackageManager.MATCH_DEFAULT_ONLY) != null) return tv;
         return SystemSettings.intent(this, Settings.ACTION_SOUND_SETTINGS);
+    }
+
+    /**
+     * reduced_motion from config.xml or the theme. Config.load would also list the wallpapers folder and rewrite its
+     * copy of config.json, on the main thread, before this panel over a playing app draws its first frame.
+     */
+    private boolean reducedMotion() {
+        boolean def = getResources().getBoolean(R.bool.reduced_motion);
+        org.json.JSONObject json = Config.theme(this);
+        Object v = json == null ? null : json.opt("reduced_motion");
+        return v instanceof Boolean ? (Boolean) v : def;
     }
 
     /** Fade in while sliding a little way in from the right edge. */
