@@ -79,22 +79,36 @@ final class Weather {
         return new Now(p.getInt("temp", 0), p.getInt("code", 0), p.getBoolean("day", true), at);
     }
 
-    /** Fetches the current weather off the main thread when the last answer is older than REFRESH_MS. */
     /** When the last request went out: a failed one is tried again after RETRY_MS, not on the next minute. */
     private static long lastTry;
     private static final long RETRY_MS = 5 * 60 * 1000L;
+    /** The last request got no answer (at boot Home asks before Wi-Fi is up): a network coming up may ask again. */
+    private static volatile boolean failed;
 
+    /** Whether to ask now: the last answer, at {@code answeredAt} (0: none), is old and no request went out lately. */
+    static boolean due(long answeredAt, long tried, long now) {
+        return now - answeredAt >= REFRESH_MS && now - tried >= RETRY_MS;
+    }
+
+    /** A network came up: a request that failed goes again on the next refresh instead of RETRY_MS later. */
+    static void networkUp() {
+        if (!failed) return;
+        failed = false;
+        lastTry = 0;
+    }
+
+    /** Fetches the current weather off the main thread when the last answer is older than REFRESH_MS. */
     static void refresh(Context ctx, android.os.Handler main, Callback cb) {
         Now last = cached(ctx);
         long now0 = System.currentTimeMillis();
-        if (last != null && now0 - last.at < REFRESH_MS) return;
-        if (now0 - lastTry < RETRY_MS) return;
+        if (!due(last == null ? 0 : last.at, lastTry, now0)) return;
         lastTry = now0;
         double[] loc = location(ctx);
         if (loc == null) return;
         Context app = ctx.getApplicationContext();
         NET.execute(() -> {
             Now now = fetch(loc[0], loc[1]);
+            failed = now == null;
             if (now == null) return;
             prefs(app).edit().putLong("at", now.at).putInt("temp", now.temp).putInt("code", now.code)
                     .putBoolean("day", now.day).apply();
