@@ -59,6 +59,8 @@ public final class EdgeFadeLayout extends FrameLayout {
     }
 
     private void apply() {
+        // Only registered from Android 10 (onAttachedToWindow); said again here, where lint looks for it.
+        if (Build.VERSION.SDK_INT < 29) return;
         if (getChildCount() == 0 || !(getChildAt(0) instanceof RecyclerView)) return;
         RecyclerView rv = (RecyclerView) getChildAt(0);
         for (int i = 0; i < rv.getChildCount(); i++) {
