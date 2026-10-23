@@ -309,6 +309,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             handler.post(MainActivity.this::updateWifiLabel);
             // Android switches Wireless debugging off when Wi-Fi drops; back on once a network is up again.
             handler.post(() -> WirelessDebugging.networkChanged(MainActivity.this));
+            // At boot the first weather request goes out before Wi-Fi is up; ask again now, not 5 minutes later.
+            handler.post(() -> {
+                Weather.networkUp();
+                if (weatherOn && started) Weather.refresh(MainActivity.this, handler, MainActivity.this::showWeather);
+            });
         }
 
         @Override
