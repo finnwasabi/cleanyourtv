@@ -1,7 +1,12 @@
 package com.gathin.tvhome;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.Build;
 
 import org.json.JSONObject;
 
@@ -16,7 +21,9 @@ import java.util.concurrent.ExecutorService;
  * The current weather beside the date: temperature, a one or two word condition and a glyph (WeatherIcon). It comes
  * from Open-Meteo (no key, no account): one small HTTPS request at most every 30 minutes while Home is open, never
  * in the background, and the last answer is kept so Home shows it at once on the next start. Nothing is drawn per
- * frame. Off unless "weather" is on in config.xml or a theme; "weather_location" is "latitude,longitude".
+ * frame. Off unless "weather" is on in config.xml or a theme; "weather_location" is "latitude,longitude", and
+ * empty means the TV's own location (coarse, once ACCESS_COARSE_LOCATION is granted), rounded to about 11 km before
+ * it is sent.
  */
 final class Weather {
     static final long REFRESH_MS = 30 * 60 * 1000L;
@@ -49,18 +56,61 @@ final class Weather {
         return json == null ? def : json.optBoolean("weather", def);
     }
 
-    /** {latitude, longitude}, or null when not set or malformed. */
+    /**
+     * {latitude, longitude}, rounded by {@link #rounded}, or null when there is none: weather_location when it is set,
+     * otherwise the newest location the TV already knows.
+     */
     static double[] location(Context ctx) {
         JSONObject json = theme(ctx);
         String s = ctx.getString(R.string.weather_location);
         if (json != null) s = json.optString("weather_location", s);
-        String[] p = s == null ? new String[0] : s.split(",");
+        double[] set = parse(s);
+        if (set != null) return new double[]{rounded(set[0]), rounded(set[1])};
+        Location here = lastKnown(ctx);
+        return here == null ? null : new double[]{rounded(here.getLatitude()), rounded(here.getLongitude())};
+    }
+
+    /** "latitude,longitude" as numbers, or null when it is empty or malformed. */
+    static double[] parse(String s) {
+        String[] p = s == null || s.trim().isEmpty() ? new String[0] : s.split(",");
         if (p.length != 2) return null;
         try {
             double lat = Double.parseDouble(p[0].trim()), lon = Double.parseDouble(p[1].trim());
             if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
             return new double[]{lat, lon};
         } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** One decimal, about 11 km: enough for the weather, and no more of where the TV is than that goes out. */
+    static double rounded(double degrees) {
+        return Math.round(degrees * 10) / 10.0;
+    }
+
+    /**
+     * The newest location any provider holds, without asking for a new fix; null without the permission, with
+     * location off, or before the TV has one. When there is none it asks the network provider once (Android 11 and
+     * later), so the next refresh finds it.
+     */
+    private static Location lastKnown(Context ctx) {
+        if (ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return null;
+        }
+        LocationManager lm = ctx.getSystemService(LocationManager.class);
+        if (lm == null) return null;
+        if (Build.VERSION.SDK_INT >= 28 ? !lm.isLocationEnabled() : lm.getProviders(true).isEmpty()) return null;
+        try {
+            Location best = null;
+            for (String provider : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(provider);
+                if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+            }
+            if (best == null && Build.VERSION.SDK_INT >= 30 && lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                lm.getCurrentLocation(LocationManager.NETWORK_PROVIDER, null, ctx.getMainExecutor(), l -> { });
+            }
+            return best;
+        } catch (SecurityException | IllegalArgumentException e) {
             return null;
         }
     }
@@ -119,8 +169,8 @@ final class Weather {
     private static Now fetch(double lat, double lon) {
         HttpURLConnection c = null;
         try {
-            URL url = new URL(String.format(Locale.US, "https://api.open-meteo.com/v1/forecast?latitude=%.4f"
-                    + "&longitude=%.4f&current=temperature_2m,weather_code,is_day&timezone=auto", lat, lon));
+            URL url = new URL(String.format(Locale.US, "https://api.open-meteo.com/v1/forecast?latitude=%.1f"
+                    + "&longitude=%.1f&current=temperature_2m,weather_code,is_day&timezone=auto", lat, lon));
             c = (HttpURLConnection) url.openConnection();
             c.setConnectTimeout(8000);
             c.setReadTimeout(8000);

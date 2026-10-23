@@ -335,7 +335,9 @@
     <string-array name="audio_receivers" translatable="false">
         <item>io.github.jqssun.airplay</item>
     </string-array>
-    <!-- weather_location is not here: the build sets it from the weatherLocation Gradle property (see app/build.gradle). -->
+    <!-- Empty: the TV's own location, coarse and rounded to about 11 km (needs
+         pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION once). "latitude,longitude" fixes it. -->
+    <string name="weather_location" translatable="false"></string>
 
     <!-- Time-of-day backdrop behind everything: a dark gradient that follows the clock, with a warm
          horizon glow around sunrise and sunset. 0 keeps the plain background (the default); 1 to 100

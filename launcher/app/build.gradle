@@ -15,9 +15,6 @@ android {
         versionName '2.6'
         // This fork runs in Vietnamese (English as the fallback): leave the other languages out of the APK.
         resourceConfigurations += ['en', 'vi']
-        // Where the weather is for, as "latitude,longitude". Kept out of the repo: set weatherLocation in
-        // ~/.gradle/gradle.properties or pass -PweatherLocation=...; empty leaves the weather off (a theme can still set it).
-        resValue 'string', 'weather_location', providers.gradleProperty('weatherLocation').getOrElse('')
     }
 
     buildTypes {
