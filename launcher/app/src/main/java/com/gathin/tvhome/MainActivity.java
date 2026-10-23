@@ -1301,6 +1301,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             cm.unregisterNetworkCallback(networkCallback);
             cm.unregisterNetworkCallback(vpnCallback);
         }
+        // The minute-long HDMI offer and any weather answer still queued would keep this activity, its wallpaper and
+        // posters, alive next to the new one after a recreate (a theme, a festival, Launcher settings).
+        handler.removeCallbacksAndMessages(null);
     }
 
     /**
