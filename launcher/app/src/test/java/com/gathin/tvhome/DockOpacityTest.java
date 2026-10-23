@@ -22,4 +22,17 @@ public class DockOpacityTest {
         assertEquals(80, Config.chosenDockOpacity(29, 80));
         assertEquals(80, Config.chosenDockOpacity(101, 80));
     }
+
+    @Test public void theLiquidGlassBandTakesTheSameOpacityAsItsFrost() {
+        // Every choice Launcher settings offers, as the glass band's frost alpha; 100 keeps the glass as it was.
+        assertEquals(255, DockDecoration.fillAlpha(100));
+        assertEquals(179, DockDecoration.fillAlpha(70));
+        assertEquals(128, DockDecoration.fillAlpha(50));
+        assertEquals(77, DockDecoration.fillAlpha(30));
+    }
+
+    @Test public void theFrostAlphaStaysInRange() {
+        assertEquals(0, DockDecoration.fillAlpha(-5));
+        assertEquals(255, DockDecoration.fillAlpha(150));
+    }
 }

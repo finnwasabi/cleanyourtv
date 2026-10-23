@@ -24,13 +24,16 @@ import androidx.annotation.NonNull;
  */
 final class LiquidGlassDrawable extends Drawable {
     private final View host;
-    private final float radius;
+    /** Corner radius in px; the dock band changes it with dock_even_padding (setRadius). */
+    private float radius;
     private final float density;
     private final int tint;
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
     private final int[] loc = new int[2];
     private int alpha = 255;
+    /** The frost's own opacity under alpha (the dock band's dock_opacity); the rim keeps alpha alone. */
+    private int fillAlpha = 255;
     /**
      * The frost, tint and sheen drawn into a half-size bitmap off the main thread and reused; the rim is drawn live.
      * Replaying everything on every frame cost a fifth of the frames on the MT9676 (20.91% janky against 0.80%
@@ -127,18 +130,19 @@ final class LiquidGlassDrawable extends Drawable {
         if (hit == null) {
             if (shown == null) {
                 // First draw: nothing to stand in, so draw this one now (once per size and wallpaper).
-                hit = render(new Rect(b), loc[0], loc[1], bd);
+                hit = render(new Rect(b), loc[0], loc[1], bd, radius);
                 cache.put(key, hit);
             } else if (want(key) && pending.add(key)) {
                 final Rect rb = new Rect(b);
                 final int lx = loc[0], ly = loc[1], gen = generation;
+                final float rr = radius;
                 RENDERER.execute(() -> {
                     // A glide passes many places; only the newest one asked for is worth drawing.
                     if (key != wanted) {
                         host.post(() -> pending.remove(key));
                         return;
                     }
-                    Bitmap done = render(rb, lx, ly, bd);
+                    Bitmap done = render(rb, lx, ly, bd, rr);
                     done.prepareToDraw();   // its texture goes up before the frame that shows it
                     host.post(() -> {
                         pending.remove(key);
@@ -150,7 +154,7 @@ final class LiquidGlassDrawable extends Drawable {
             }
         }
         if (hit != null) shown = hit;
-        blit.setAlpha(alpha);
+        blit.setAlpha(alpha * fillAlpha / 255);
         dst.set(b);
         canvas.drawBitmap(shown, null, dst, blit);
         // The rim live: a thin gradient stroke is cheap for the GPU and stays sharp at full size.
@@ -163,10 +167,10 @@ final class LiquidGlassDrawable extends Drawable {
     }
 
     /**
-     * The frost, tint and sheen of the surface at {@code b} at half size, for a host at (lx, ly) on screen. Uses only
-     * its own paints, so it can run off the main thread.
+     * The frost, tint and sheen of the surface at {@code b} at half size with corner radius {@code radius}, for a host
+     * at (lx, ly) on screen. Uses only its own paints and arguments, so it can run off the main thread.
      */
-    private Bitmap render(Rect b, int lx, int ly, Bitmap bd) {
+    private Bitmap render(Rect b, int lx, int ly, Bitmap bd, float radius) {
         Bitmap out = Bitmap.createBitmap(Math.max(1, b.width() / 2), Math.max(1, b.height() / 2), Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(out);
         canvas.scale(0.5f, 0.5f);
@@ -195,6 +199,24 @@ final class LiquidGlassDrawable extends Drawable {
     }
 
     @Override public void setAlpha(int a) { alpha = a; invalidateSelf(); }
+
+    /** The frost's opacity, 0 to 255, on top of setAlpha; the rim stays as setAlpha leaves it. */
+    void setFillAlpha(int a) {
+        if (a == fillAlpha) return;
+        fillAlpha = a;
+        invalidateSelf();
+    }
+
+    /** A new corner radius: the cached surfaces had the old corners, so they are drawn again (once, on this thread). */
+    void setRadius(float r) {
+        if (r == radius) return;
+        radius = r;
+        cache.clear();
+        pending.clear();
+        generation++;
+        shown = null;
+        invalidateSelf();
+    }
 
     @Override public void setColorFilter(ColorFilter cf) { }
 

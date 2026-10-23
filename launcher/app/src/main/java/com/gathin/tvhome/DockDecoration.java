@@ -39,7 +39,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     /**
      * @param translucent the cinematic shelf's band: the artwork and the glow show through it.
      * @param names       the dock tiles show their names, so the band reaches down over them.
-     * @param opacity     the plain band's opacity in percent (dock_opacity), so a wallpaper can show through it.
+     * @param opacity     the band's opacity in percent (dock_opacity), so a wallpaper can show through it; for the liquid
+     *                    glass band it is the frost's, and the rim stays.
      * @param lightGlass  a light frosted band like the pills, for a sky or wallpaper behind it.
      * @param evenPadding the band's padding is the gap between the tiles on all four sides (dock_even_padding).
      * @param glassHost   the view a liquid glass band is drawn in (theme key liquid_glass); null for the flat band.
@@ -47,6 +48,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     DockDecoration(int dockSize, float density, boolean translucent, boolean names, int opacity, boolean lightGlass,
                    boolean evenPadding, View glassHost) {
         this.glass = glassHost == null ? null : new LiquidGlassDrawable(glassHost, 26 * density, density, 0x1FFFFFFF);
+        if (glass != null) glass.setFillAlpha(fillAlpha(opacity));
         this.dockSize = dockSize;
         this.density = density;
         this.namesRoom = names ? 22 * density : 0;
@@ -79,6 +81,11 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     /** Concentric corners: the band's radius is the tiles' radius plus the band's padding around them. */
     static float radiusPx(float tileRadiusPx, float paddingPx) {
         return tileRadiusPx + paddingPx;
+    }
+
+    /** dock_opacity (30 to 100 percent) as the liquid glass band's frost alpha, 0 to 255; 100 leaves it opaque. */
+    static int fillAlpha(int opacityPercent) {
+        return (Math.max(0, Math.min(100, opacityPercent)) * 255 + 50) / 100;
     }
 
     /**
@@ -148,6 +155,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         rect.bottom += namesRoom;
         if (fade <= 0f) return;
         if (glass != null) {
+            glass.setRadius(radius);
             rect.roundOut(bounds);
             glass.setBounds(bounds);
             glass.setAlpha(Math.round(255 * fade));
