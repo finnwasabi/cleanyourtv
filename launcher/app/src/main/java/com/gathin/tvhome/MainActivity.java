@@ -308,7 +308,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         public void onAvailable(@NonNull Network network) {
             handler.post(MainActivity.this::updateWifiLabel);
             // Android switches Wireless debugging off when Wi-Fi drops; back on once a network is up again.
-            handler.post(() -> WirelessDebugging.ensure(MainActivity.this));
+            handler.post(() -> WirelessDebugging.networkChanged(MainActivity.this));
         }
 
         @Override
