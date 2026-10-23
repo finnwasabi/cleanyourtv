@@ -191,6 +191,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean sessionsListening;
     /** The AirPlay receiver the pill names and opens: the first installed of audio_receivers in config.xml. */
     private String quietPkg;
+    /**
+     * quietPkg was looked up: two PackageManager calls per receiver, which would otherwise run on every return to Home
+     * before its first frame. An app installed or removed (packageReceiver) looks again.
+     */
+    private boolean quietPkgKnown;
     /** What the Now playing pill says when focused; it shows only its glyph otherwise. */
     private CharSequence playingLabel = "";
     private final android.media.AudioManager.AudioPlaybackCallback audioChanged =
@@ -359,6 +364,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private final BroadcastReceiver packageReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            quietPkgKnown = false;
             // Updates send REMOVED followed by ADDED; keep the tile until the new APK is ready.
             if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
                     && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return;
@@ -1095,13 +1101,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
         if (am == null) return;
         if (on && !sessionsListening) {
-            quietPkg = null;
-            for (String r : getResources().getStringArray(R.array.audio_receivers)) {
-                if (getPackageManager().getLaunchIntentForPackage(r) != null
-                        || getPackageManager().getLeanbackLaunchIntentForPackage(r) != null) {
-                    quietPkg = r;
-                    break;
+            if (!quietPkgKnown) {
+                quietPkg = null;
+                for (String r : getResources().getStringArray(R.array.audio_receivers)) {
+                    if (getPackageManager().getLaunchIntentForPackage(r) != null
+                            || getPackageManager().getLeanbackLaunchIntentForPackage(r) != null) {
+                        quietPkg = r;
+                        break;
+                    }
                 }
+                quietPkgKnown = true;
             }
             if (quietPkg == null) return;   // no receiver installed: nothing to listen for
             am.registerAudioPlaybackCallback(audioChanged, handler);
