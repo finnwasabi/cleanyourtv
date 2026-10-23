@@ -609,7 +609,12 @@ final class ChannelsAdapter extends RecyclerView.Adapter<ChannelsAdapter.RowHold
                 // A program may only start the app that published it.
                 if (i.getComponent() != null && !pkg.equals(i.getComponent().getPackageName())) i = null;
                 else if (i.getComponent() == null) i.setPackage(pkg);
-                if (i != null) i.setSelector(null);
+                if (i != null) {
+                    i.setSelector(null);
+                    // Nor may it borrow Home's own access (the TV listings READ_TV_LISTINGS opens) through grant flags.
+                    i.removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                }
             } catch (Exception e) {
                 i = null;
             }
