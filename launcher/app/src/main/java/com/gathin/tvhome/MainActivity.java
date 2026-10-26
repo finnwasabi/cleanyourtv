@@ -369,6 +369,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
         @Override
         public void onCapabilitiesChanged(@NonNull Network network, @NonNull NetworkCapabilities caps) {
+            // icon_bar: the Wi-Fi icon follows the signal, redrawn only when its level changes.
+            if (iconBar && Build.VERSION.SDK_INT >= 29 && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                int strength = caps.getSignalStrength();
+                if (strength != NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED
+                        && wifiBars(strength) != wifiLevelShown) handler.post(MainActivity.this::updateWifiLabel);
+            }
             boolean validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
             if (validated == lastValidated) return;
             lastValidated = validated;
@@ -861,7 +867,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 String id = hdmiReady;
                 setHdmiReady(null, null);
                 openInput(id);
-            } else {
+            } else if (!iconBar || !openOnlyHdmi()) {
                 showInputs();
             }
         });
@@ -941,6 +947,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             for (View pill : new View[]{btnInputs, btnWifi, btnSettings, btnReorder}) pill.setBackground(liquidPill(pill));
             btnNowPlaying.setBackground(liquidPill(btnNowPlaying, 16));
         }
+        iconBar = getResources().getBoolean(R.bool.icon_bar) && !cfg.topMenu;
+        btnAirPlay = findViewById(R.id.btnAirPlay);
+        if (iconBar) setUpIconBar();
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -973,6 +982,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         btnWifi.setOnKeyListener(pillKeys);
         btnVpn.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
+        btnAirPlay.setOnKeyListener(pillKeys);
         btnReorder.setOnKeyListener(pillKeys);
         btnLibraryTop.setOnKeyListener(pillKeys);
         for (View button : topAppButtons) button.setOnKeyListener(pillKeys);
@@ -1363,6 +1373,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     private void showPlaying() {
         android.media.AudioManager am = getSystemService(android.media.AudioManager.class);
+        if (iconBar) {
+            boolean on = quietPkg != null && am != null && am.isMusicActive();
+            if (on != airPlayActive) {
+                airPlayActive = on;
+                tintAirPlay();
+            }
+            btnNowPlaying.setVisibility(View.GONE);
+            return;
+        }
         if (quietPkg != null && am != null && am.isMusicActive()) {
             playingLabel = getString(R.string.playing_through, appLabel(quietPkg));
             btnNowPlaying.setContentDescription(playingLabel);
@@ -3172,6 +3191,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
             }
         } catch (Exception ignored) {
         }
+        if (iconBar && icon == R.drawable.ic_wifi) icon = R.drawable.ic_wifi_level;
         // With a VPN app configured, a VPN that is down matters too: show a red "VPN off" capsule then.
         boolean vpnDown = !vpn && online && !vpnApp.isEmpty();
         if (vpnPill) updateVpnPill(vpn);
@@ -3216,6 +3236,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                 wifiIcon = icon;
                 btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
             }
+            if (icon == R.drawable.ic_wifi_level) {
+                // Offline all faint; online some other way than Wi-Fi (no signal to read) full.
+                int level = !online ? 0 : flame > 0 ? flame : 4;
+                Drawable bars = btnWifi.getCompoundDrawablesRelative()[0];
+                if (bars != null) bars.setLevel(level);
+                wifiLevelShown = level;
+            }
             ColorStateList tint = online ? wifiOnlineTint : wifiPlainTint;
             // wifi_status_warnings: orange while connected but not validated (a captive portal), red while offline.
             if (wifiNoInternetTint != null) tint = !online ? wifiOfflineTint : validated ? wifiOnlineTint : wifiNoInternetTint;
@@ -3227,6 +3254,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
 
     /** config.xml icon_only_buttons. */
     private boolean iconOnlyButtons;
+    /** config.xml icon_bar (fork): the top buttons as icons in one shared capsule. */
+    private boolean iconBar;
+    /** icon_bar's AirPlay button, and whether its receiver plays now (the icon is lit then). */
+    private TextView btnAirPlay;
+    private boolean airPlayActive;
+    /** icon_bar: the Wi-Fi level last drawn, so signal-strength callbacks redraw only when it changes. */
+    private volatile int wifiLevelShown = -1;
     /** config.xml top_menu: Inputs, Wi-Fi and Settings folded into one gear. */
     private boolean topMenu;
     /** show_inputs_pill as configured: top_menu clears showInputsPill, so its Inputs row reads this. */
@@ -3244,6 +3278,113 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private boolean libraryFromTopBar;
     /** The open library came from the VPN pill (vpn_pill, no VPN app): closing it returns there while the pill still shows. */
     private boolean libraryFromVpnPill;
+
+    /** The Wi-Fi bars (1 to 4) for a signal of {@code rssi} dBm, as updateWifiLabel draws them. */
+    @SuppressWarnings("deprecation")
+    private static int wifiBars(int rssi) {
+        return Math.max(1, Math.min(4, WifiManager.calculateSignalLevel(rssi, 5)));
+    }
+
+    /**
+     * config.xml icon_bar (fork): Inputs, Wi-Fi, AirPlay and Settings as round icons in one shared capsule, the focused
+     * one a white circle. Runs after the liquid glass backgrounds, which it replaces.
+     */
+    private void setUpIconBar() {
+        LinearLayout bar = findViewById(R.id.topButtons);
+        int pad = Math.round(4 * density);
+        bar.setPadding(pad, pad, pad, pad);
+        float r = 25 * density;
+        if (liquidGlass) {
+            bar.setBackground(new LiquidGlassDrawable(bar, r, density, 0x26FFFFFF));
+        } else {
+            GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{0x2EFFFFFF, 0x14FFFFFF});
+            bg.setStroke(Math.max(1, Math.round(density)), 0x38FFFFFF);
+            bg.setCornerRadius(r);
+            bar.setBackground(bg);
+        }
+        String receiver = null;
+        for (String pkg : getResources().getStringArray(R.array.audio_receivers)) {
+            if (receiverIntent(pkg) != null) {
+                receiver = pkg;
+                break;
+            }
+        }
+        final String airPlayPkg = receiver;
+        btnAirPlay.setVisibility(airPlayPkg != null ? View.VISIBLE : View.GONE);
+        btnAirPlay.setOnClickListener(v -> {
+            Intent i = receiverIntent(airPlayPkg);
+            if (i != null) open(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        });
+        btnAirPlay.setOnFocusChangeListener((v, focused) -> tintAirPlay());
+        TextView settings = findViewById(R.id.btnSettings);
+        makeIconOnly((TextView) btnInputs);
+        makeIconOnly(btnWifi);
+        makeIconOnly(settings);
+        wifiIconOnly = true;
+        // One HDMI port opens at once; holding OK still offers the Inputs menu.
+        btnInputs.setOnLongClickListener(v -> {
+            showInputs();
+            return true;
+        });
+        int gap = Math.round(6 * density);
+        boolean first = true;
+        for (int i = 0; i < bar.getChildCount(); i++) {
+            View b = bar.getChildAt(i);
+            b.setBackground(iconBarButton());
+            ((ViewGroup.MarginLayoutParams) b.getLayoutParams()).setMarginStart(first ? 0 : gap);
+            if (b.getVisibility() == View.VISIBLE) first = false;
+        }
+        wifiIcon = R.drawable.ic_wifi_level;
+        btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(wifiIcon, 0, 0, 0);
+    }
+
+    /** An icon_bar button: nothing until focused, then a white circle (crossfaded, as pill_bg does). */
+    private Drawable iconBarButton() {
+        GradientDrawable focused = new GradientDrawable();
+        focused.setShape(GradientDrawable.OVAL);
+        focused.setColor(0xF5FFFFFF);
+        android.graphics.drawable.StateListDrawable states = new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_focused}, focused);
+        states.addState(new int[]{}, new ColorDrawable(Color.TRANSPARENT));
+        states.setEnterFadeDuration(170);
+        states.setExitFadeDuration(230);
+        return states;
+    }
+
+    /** The receiver's own screen: its TV launcher entry, or its phone one. Null when it is not installed. */
+    private Intent receiverIntent(String pkg) {
+        if (pkg == null) return null;
+        Intent i = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
+        return i != null ? i : getPackageManager().getLaunchIntentForPackage(pkg);
+    }
+
+    /** The AirPlay icon: dark on its focus circle, green while the receiver plays, white otherwise. */
+    private void tintAirPlay() {
+        int c = btnAirPlay.isFocused() ? 0xFF111111 : airPlayActive ? 0xFF34C759 : 0xFFFFFFFF;
+        btnAirPlay.setCompoundDrawableTintList(ColorStateList.valueOf(c));
+    }
+
+    /** icon_bar: opens the TV's HDMI port when it has exactly one (a CEC device on it is part of that port). */
+    private boolean openOnlyHdmi() {
+        TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
+        if (tim == null) return false;
+        String only = null;
+        try {
+            for (TvInputInfo info : tim.getTvInputList()) {
+                if (!info.isPassthroughInput() || info.getType() != TvInputInfo.TYPE_HDMI || info.isHidden(this)) continue;
+                if (info.getParentId() != null) continue;
+                if (Integer.valueOf(-1).equals(mappedSource(info.getId()))) continue;
+                if (only != null) return false;
+                only = info.getId();
+            }
+        } catch (RuntimeException e) {
+            return false;
+        }
+        if (only == null) return false;
+        openInput(only);
+        return true;
+    }
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
     private void makeIconOnly(TextView pill) {
@@ -3475,7 +3616,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         hdmiReady = inputId;
         btnInputs.animate().cancel();
         // The festive skin draws the pill as a bell with no text; it keeps its bell.
-        if (btnInputs instanceof TextView && !festive) {
+        if (iconBar) {
+            btnInputs.setContentDescription(label != null ? label : getString(R.string.inputs));
+        } else if (btnInputs instanceof TextView && !festive) {
             ((TextView) btnInputs).setText(label != null ? label : getString(R.string.inputs));
         }
         btnInputs.setAlpha(1f);
