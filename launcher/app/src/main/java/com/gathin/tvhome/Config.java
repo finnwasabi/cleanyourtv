@@ -397,6 +397,23 @@ final class Config {
         return ctx.getExternalFilesDir(null);
     }
 
+    /**
+     * The locale key alone (config.xml, or the theme's "locale"), for LauncherLocale.wrap in every activity's
+     * attachBaseContext. load() there read about a hundred resources and wrote the overlay's copy back to disk once
+     * more on each start of Home and the Settings panel, for a key that is usually empty. Reads the same file
+     * load() would, and writes nothing.
+     */
+    static String localeTag(Context ctx) {
+        String locale = ctx.getResources().getString(R.string.locale).trim();
+        File json = new File(ctx.getFilesDir(), FILE_NAME);
+        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
+            File dir = dir(ctx);
+            json = dir != null ? new File(dir, FILE_NAME) : null;
+        }
+        JSONObject overlay = read(json);
+        return overlay == null ? locale : string(overlay, "locale", locale).trim();
+    }
+
     static Config load(Context ctx) {
         Resources res = ctx.getResources();
         List<String> dock = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.dock_apps)));
