@@ -91,7 +91,9 @@ def load(root):
         if "readme_os" in data:
             problems += check_cell(where, "readme_os", data["readme_os"])
         for key in ("tv", "notes"):
-            for target in LINK.findall(data.get(key) or ""):
+            value = data.get(key)
+            # A value that is not a string has no link to read, and check_cell has already said it is wrong.
+            for target in LINK.findall(value if isinstance(value, str) else ""):
                 if re.match(r"^(https?:|mailto:|#)", target):
                     continue
                 if not (root / "examples" / target.split("#")[0]).exists():
@@ -343,8 +345,10 @@ def main(argv=None):
         return 2
     if "tools/readme_stats.py" in changed:
         if a.font:
+            # The font was checked from where this runs; the scripts run in the checkout, so hand them the full path.
+            font = str(Path(a.font).resolve())
             for script, out in (("tools/readme_stats.py", "docs/stats.png"), ("tools/readme_card.py", "docs/card.jpg")):
-                subprocess.run([sys.executable, script, a.font, out], cwd=root, check=True)
+                subprocess.run([sys.executable, script, font, out], cwd=root, check=True)
             changed += ["docs/stats.png", "docs/card.jpg"]
         else:
             print("A count changed: redraw docs/stats.png and docs/card.jpg (--font Fredoka.ttf, or "

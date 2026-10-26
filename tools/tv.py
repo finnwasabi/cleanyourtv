@@ -24,9 +24,35 @@ if sys.argv[1:2] and sys.argv[1] in ("-h", "--help"):
     print((__doc__ or "").strip())
     sys.exit(0)
 
-from adb_shell.adb_device import AdbDeviceTcp
-from adb_shell.auth.keygen import keygen
-from adb_shell.auth.sign_pythonrsa import PythonRSASigner
+# The docs type `tools/tv.py ...`, which starts the first python3 on PATH, and that one seldom has
+# adb_shell: the README installs it into tools/venv only. Run that way, tv.py starts again under the
+# venv's Python, or says how to make the venv, instead of ending in a ModuleNotFoundError traceback.
+# Only when run as a script: recovery.py, privacy.py, bench.py and the tests import this file and
+# handle a missing client themselves.
+try:
+    from adb_shell.adb_device import AdbDeviceTcp
+    from adb_shell.auth.keygen import keygen
+    from adb_shell.auth.sign_pythonrsa import PythonRSASigner
+except ImportError as e:
+    if __name__ != "__main__":
+        raise
+    _dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv")
+    _venv = next((p for p in (os.path.join(_dir, "bin", "python"), os.path.join(_dir, "Scripts", "python.exe"))
+                  if os.path.isfile(p)), None)
+    # Once only, marked in the environment: a venv that lacks adb_shell as well gets the message below
+    # rather than another run of itself.
+    if _venv and not os.environ.get("CLEANYOURTV_TV_PY_VENV"):
+        os.environ["CLEANYOURTV_TV_PY_VENV"] = "1"
+        _args = [_venv, "-I", os.path.abspath(__file__), *sys.argv[1:]]
+        if os.name == "nt":
+            # No exec on Windows: os.execv starts a second process, and the shell takes its prompt back.
+            import subprocess
+            sys.exit(subprocess.call(_args))
+        os.execv(_venv, _args)
+    _make = (r"python -m venv tools\venv; tools\venv\Scripts\python.exe -m pip install -r tools\requirements.txt"
+             if os.name == "nt" else
+             "python3 -m venv tools/venv && tools/venv/bin/pip install -r tools/requirements.txt")
+    sys.exit(f"tools/tv.py needs the packages in tools/requirements.txt ({e}).\nrun: {_make}")
 
 # Windows consoles often use an old code page (cp1251, cp1252 and others) that cannot print every character
 # in dumpsys output. Python then stops with an error in the middle. disable.ps1 reads this output to see if
@@ -68,7 +94,8 @@ except ValueError:
 KEYDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "adbkey")
 KEY = os.path.join(KEYDIR, "adbkey")
 # Reuse the stock adb key when the TV already trusts it (platform-tools / Android Studio users), so the
-# "Allow USB debugging?" prompt doesn't come back a second time for this client. From #105.
+# "Allow USB debugging?" prompt doesn't come back a second time for this client. From #105. While
+# tools/adbkey has no key, the stock key is the only one; once it has one, connect() offers both.
 ADB_KEY = os.path.join(os.path.expanduser("~"), ".android", "adbkey")
 if not os.path.exists(KEY) and os.path.exists(ADB_KEY) and os.path.exists(ADB_KEY + ".pub"):
     KEY = ADB_KEY
@@ -111,9 +138,34 @@ def get_signer():
     return PythonRSASigner(pub, priv)
 
 
+def stock_signer():
+    """The stock ~/.android/adbkey, to offer after tools/adbkey's key, or None.
+
+    A tools/adbkey made before the TV approved the stock adb key kept a set that trusts that key
+    `unauthorized` until the folder was deleted (#1526). adb_shell signs the TV's token with each key in
+    turn, as the stock adb does with its keys, and sends the first key's public half (the "Allow USB
+    debugging?" prompt) only when the TV accepts none. So a second key adds no prompt, and the prompt
+    still asks for tools/adbkey's key. The stock key is only read, never chmod-ed, and one that cannot
+    be read or parsed is left out rather than stopping a connection tools/adbkey's key can make."""
+    if KEY == ADB_KEY or not (os.path.exists(ADB_KEY) and os.path.exists(ADB_KEY + ".pub")):
+        return None
+    try:
+        with open(ADB_KEY) as f:
+            priv = f.read()
+        with open(ADB_KEY + ".pub") as f:
+            pub = f.read()
+        return PythonRSASigner(pub, priv)
+    except Exception:   # unreadable (a `sudo adb` run can leave it root's), or not a key adb_shell parses
+        return None
+
+
 def connect(timeout=120):
     dev = AdbDeviceTcp(HOST, PORT, default_transport_timeout_s=float(timeout))
-    dev.connect(rsa_keys=[get_signer()], transport_timeout_s=float(timeout), auth_timeout_s=timeout)
+    keys = [get_signer()]   # first, so the prompt asks for the same key as before
+    stock = stock_signer()
+    if stock is not None:
+        keys.append(stock)
+    dev.connect(rsa_keys=keys, transport_timeout_s=float(timeout), auth_timeout_s=timeout)
     return dev
 
 

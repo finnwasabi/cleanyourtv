@@ -311,7 +311,8 @@ def print_report(result):
               f"{MAX_PROBES}); check them by hand with `dumpsys package <name>`.")
         print()
     print("What to do with it")
-    print("  tools/privacy.py --write privacy.txt        # the voice, ACR and telemetry rows above")
+    print("  TV_HOST=<tv ip> tools/venv/bin/python -I tools/privacy.py --write privacy.txt   "
+          "# the voice, ACR and telemetry rows above")
     print("  TV_HOST=<tv ip> tools/disable.sh privacy.txt   # applies it, records the undo first")
     print("  TV_HOST=<tv ip> tools/restore.sh privacy.txt   # undo")
     print()

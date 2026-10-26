@@ -233,7 +233,7 @@ def main(argv=None):
                 bench.restore_accessibility(_Shell(shell), args.package, helpers)
     finally:
         dev.close()
-    print(f"next: tools/trace_report.py {args.out}   (see tools/trace.md)")
+    print(f"next: tools/venv/bin/python -I tools/trace_report.py {args.out}   (see tools/trace.md)")
 
 
 class _Shell:

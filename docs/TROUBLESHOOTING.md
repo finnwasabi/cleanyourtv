@@ -101,14 +101,17 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
 - **Windows PowerShell 5.1 adds a byte-order mark** to text piped into a program, which turned the
   first batch command into gibberish. `tv.py` now strips it, and the `.ps1` scripts pipe clean UTF-8.
 - **"Allow USB debugging?" comes back**, or the TV answers `unauthorized` although `adb devices` already
-  works: `tv.py` keeps a key of its own in `tools/adbkey/`, and it only falls back to the stock
-  `~/.android/adbkey` ([#105](https://github.com/Gathin23/cleanyourtv/issues/105)) while that folder does
-  not exist. So a set that was first reached with this client is asked for a key platform-tools never
-  registered, and revoking the authorisations or toggling USB debugging brings the prompt back instead of
-  a connection. Delete the folder and the next run takes the stock key: `rm -rf tools/adbkey`
-  (`rmdir /s /q tools\adbkey` in PowerShell), then `tools/tv.py --probe` and accept that one prompt.
-  Every attempt with an unaccepted key queues one more prompt on the TV, so dismiss them all (Back)
-  before testing with key presses ([#1526](https://github.com/Gathin23/cleanyourtv/issues/1526)).
+  works: `tv.py` keeps a key of its own in `tools/adbkey/` and offers the stock `~/.android/adbkey`
+  ([#105](https://github.com/Gathin23/cleanyourtv/issues/105)) after it, so a set that trusts either key
+  connects with no prompt. Older copies offered the stock key only while `tools/adbkey` did not exist,
+  which kept a TCL 55C61B `unauthorized` ([#1526](https://github.com/Gathin23/cleanyourtv/issues/1526)),
+  so update the checkout first. When the TV trusts neither key, the prompt asks for `tv.py`'s own. To have
+  it register the stock key instead, so `adb` and `tv.py` share one approval, delete the folder:
+  `rm -rf tools/adbkey` (`Remove-Item -Recurse -Force tools\adbkey` in PowerShell,
+  `rmdir /s /q tools\adbkey` in Command Prompt), then `tools/tv.py --probe`
+  (`tools\venv\Scripts\python.exe -I tools\tv.py --probe` on Windows) and accept that one prompt. Every
+  attempt with an unaccepted key queues one more prompt on the TV, so dismiss them all (Back) before
+  testing with key presses.
 - **Git Bash rewrites paths** like `/data/local/tmp` into Windows paths. The scripts set
   `MSYS_NO_PATHCONV=1` for you. Set `JAVA_HOME` and `ANDROID_HOME` before building there.
 
@@ -125,6 +128,19 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   `com.google.android.apps.tv.dreamx`, the same package as the promo screensaver, and Apps only mode hides it
   too. Re-enable dreamx and switch Apps only mode off to bring it back; the screensaver can stay on the
   launcher's clock. Seen on a TCL Smart TV Pro (`G03_4K_US`, Google TV 11, GTV93).
+- **The Google Home panel opens and closes at once, though dreamx is still enabled**, once the stock
+  launcher is off: dreamx (`com.google.android.apps.tv.dreamx`) loads the panel's account and the device
+  trust through launcherx, so with `com.google.android.apps.tv.launcherx` disabled logcat shows
+  `Failed to find provider info for
+  com.google.android.apps.tv.launcherx.coreservices.account.AccountModeContentProvider`, then
+  `EligibilityManagerImpl: SmartHome: Error loading account`, and a `bindService` to launcherx's
+  `TrustedNetworkStateService` returning false. Re-enabling launcherx brings the panel back straight away,
+  with no reboot. Sparing launcherx's home activity alone is refused as well (`Shell cannot change
+  component state`, as in the bullet on `pm disable <package>/<class>` below), so it is the whole package
+  or the panel: if the household uses Google Home lights, keep launcherx enabled and hand Home to the new
+  launcher with `stock_home_redirect` (`themes/README.md`) instead of disabling it. Seen on a TCL Smart TV
+  Pro (`G03_4K_US`, Google TV 11, GTV93,
+  [#1653](https://github.com/Gathin23/cleanyourtv/issues/1653)).
 - **Large pushes hang** through the Python client. Use `tools/b64push.py` for APKs.
 - **`tools/tv.py reboot` never comes back.** `reboot` is a shell command, and adbd stops before it
   sends the shell's last `CLSE`, so the client waits for a reply that cannot arrive: two minutes,
@@ -164,6 +180,29 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   is already `disabled` (`enabled=2` in `dumpsys package`, as `tvrecommendations` is on a Chromecast
   with Google TV 4K). There is no shell route around it, so don't retry it with other flags: disable the
   whole package with `pm disable-user --user 0`, or keep it.
+- **`pm disable-user` answers `Error: java.lang.IllegalArgumentException: Unknown package: <package>`**,
+  by hand or for one line of a list ([#1880](https://github.com/Gathin23/cleanyourtv/issues/1880), a Konka
+  B50U). Nothing of that name is installed for the user the command names, so that one line changed
+  nothing - and the lines around it still run: `tools/disable.sh` pipes the list into
+  `tools/tv.py --batch`, which runs each line as its own shell call and carries on to the next whatever
+  this one answered, so a list with three unknown names in it still finishes, and the client's exit
+  status says nothing about them. What the line is worth is the name in it. Two causes. The list was
+  written on another set: every list here names the model and firmware build in its header, preloads
+  differ between regional builds of the same model, and
+  [`examples/tcl-c845x2-google-tv/debloat.txt`](../examples/tcl-c845x2-google-tv/debloat.txt) calls its
+  own two `Unknown package` errors harmless for exactly that reason. Or the name is not a package at all:
+  a store title, a home-screen tile, or a name guessed from the app's look, as
+  `com.vendor.recommendations` was. `pm list packages` is the only list of names the TV answers to, and a
+  fragment of the app's name usually finds it:
+  ```sh
+  tools/tv.py 'pm list packages | grep -i recommend'
+  tools/tv.py 'pm list packages -u --user 0 <package>'    # -u: one removed earlier still shows
+  ```
+  Nothing from the first command means the app is not on this TV, so comment its line out of the list
+  instead of retrying it - and check the model and Android version `tools/tv.py --probe` prints against
+  the header of the list you are following. A name the TV does list is the case the bullet below covers:
+  `tools/recovery.py` records a listed package that was already gone before the first run as `absent`,
+  and `restore.sh` and `check.py` say so in their own words.
 - **A package removed with `pm uninstall --user 0`, by hand or by another debloat tool, stays gone
   after `tools/restore.sh`.** The [Toshiba 55Z500QF](devices/toshiba-55z500qf-cn.md) note (Hisense
   firmware, Android 11, `RD2A.211001.002`) has 23 preinstalled packages its owner removed that way. The
@@ -176,16 +215,23 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   "not installed any more". Bring it back with
   `tools/tv.py 'cmd package install-existing --user 0 <package>'` (AOSP's `cmd package` has it from
   Android 8.0; the Android 6 set in [#1185](https://github.com/Gathin23/cleanyourtv/issues/1185) had no
-  such command; no TV here has run it yet). It comes back enabled, and without its data unless the
-  uninstall used `-k`. To keep it, comment its line out of your list first: otherwise `check.py` reports
-  it as back on, and `--fix` or the next `disable.sh` run disables it again. If you don't want it, let
-  the list disable it afterwards, which the TV's own settings can undo. The record still calls it
-  absent, so `restore.sh` keeps leaving it alone: `pm enable --user 0 <package>` is its undo. Two cases
-  this does not cover. An app with no copy on the system partition that only user 0 had is deleted with
-  its APK: the command answers `Package <package> doesn't exist`, and only reinstalling the APK brings
-  it back (the Toshiba's `com.hisense.business.ad`). And a `User 0:` line with
-  `installed=true hidden=true` was hidden, not uninstalled. install-existing changes nothing there even
-  though it prints `Package <package> installed for user: 0`, and the shell cannot unhide it:
+  such command; no TV here has run it yet). It comes back without its data unless the uninstall used
+  `-k`, and disabled if a list that names it has gone through `disable.sh` since it was removed: that
+  run sent it `pm disable-user --user 0`, which AOSP applies to a package removed for user 0 too (the
+  [Shield list](../examples/nvidia-shield-tv-pro-2019/debloat.txt) notes `disable.sh` reporting
+  "disabled-user" for such packages), and install-existing marks it installed without changing that
+  state. `pm list packages -d --user 0 <package>` names it if it came back disabled. To keep it, comment
+  its line out of your list, then run `tools/tv.py 'pm enable --user 0 <package>'`: with the line still
+  in, `check.py` reports it as back on, and `--fix` or the next `disable.sh` run disables it again. If
+  you don't want it, keep the line: the list disables it, or keeps it disabled, which the TV's own
+  settings can undo. `--fix` or a `disable.sh` run that finds it enabled first changes it from absent to
+  enabled in the record, so `restore.sh` turns it back on too. Until then, or in a record an older
+  version updated, it stays absent, and `restore.sh` leaves it alone: `pm enable --user 0 <package>` is
+  its undo. Two cases this does not cover. An app with no copy on the system partition that only user 0
+  had is deleted with its APK: the command answers `Package <package> doesn't exist`, and only
+  reinstalling the APK brings it back (the Toshiba's `com.hisense.business.ad`). And a `User 0:` line
+  with `installed=true hidden=true` was hidden, not uninstalled. install-existing changes nothing there
+  even though it prints `Package <package> installed for user: 0`, and the shell cannot unhide it:
   `pm unhide` needs `MANAGE_USERS`, which the shell does not hold from Android 7.0. Unhide it from the
   device-owner app that hid it, or leave it, as the
   [Chromecast with Google TV 4K list](../examples/google-chromecast-gtv-4k/debloat.txt) does with
@@ -243,13 +289,35 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   HDMI and AV rows carry no package. Until the launcher checks that the handler is a TV-input app,
   hide the rows instead: a theme with `source_panel_service` set and `live_tv_package` empty makes
   the Inputs pill open the TV's own source panel (what the reporter did), or disable the app that
-  answers. Report another one rather than reading it as a firmware quirk: the wrong-handler case needs
+  answers when it is not a Live TV or input app. `tools/disable.sh` (`disable.ps1`) keeps any listed
+  app that query names and skips it with "the TV opens its HDMI/AV inputs and channels with it", so
+  put its line in a list of its own and apply that with `HANDLERS_ALLOW=1` (`$env:HANDLERS_ALLOW`):
+  the rest of your list keeps the guard. Run `tools/check.py --fix` on that list with the same
+  switch, or it leaves the app on and exits 1. In PowerShell the switch stays set until the window
+  is closed: run `Remove-Item Env:HANDLERS_ALLOW` after those two, or the next `disable.ps1` or
+  `check.py --fix` on your main list skips the guard too. To turn the app back on, use
+  `tools/tv.py 'pm enable --user 0 <package>'`. `tools/restore.sh` with that list turns it back on
+  as well, but it also turns the stock launcher back on and makes it Home, as it does for any list.
+  Report another one rather than reading it as a firmware quirk: the wrong-handler case needs
   a source change, not a setting.
 - **`adb exec-out screencap -p` gives a broken PNG** on some MediaTek sets (Xiaomi, and Amazon's
   own Fire TV smart TVs): the binary prints `Init wrapper sys mutex successful` on stdout first.
   Save on the TV and pull the file instead: `screencap -p /data/local/tmp/s.png`, or cut
   everything before the `\x89PNG` header. `tools/tv.py --screenshot shots/home.png` does the save,
   the pull and the cleanup in one command, and says so when the capture is 0 bytes.
+- **Gradle says "Your project path contains non-ASCII characters" on Windows** before building the
+  launcher. Android's build tools reject a checkout under a localized folder such as `桌面` (Desktop).
+  This was seen while installing on a Sony KM-55X85J (Google TV 12, Taiwan firmware); the TV is not
+  changed when the build stops here ([#1777](https://github.com/Gathin23/cleanyourtv/issues/1777)).
+  Clone the repo into an ASCII-only path such as `C:\cleanyourtv`, or map a drive letter to the
+  checkout's parent directory and run the build through it:
+  ```powershell
+  subst X: 'C:\Users\<user>\OneDrive\桌面\sideproject'
+  Set-Location X:\cleanyourtv
+  powershell -ExecutionPolicy Bypass -File launcher\build-and-install.ps1 -TvHost <tv ip>
+  Set-Location C:\
+  subst X: /D  # after the build is finished
+  ```
 - **Play Protect blocked the launcher** ("unsafe app blocked, built for an older version of Android")
   and `pm install` hung, then failed with `INSTALL_FAILED_VERIFICATION_FAILURE`, while it targeted
   SDK 29. It targets 34 now; if you built an old checkout, rebuild.
@@ -723,7 +791,7 @@ tools/tv.py 'dumpsys accessibility'
 
 | Helper | Component in the enabled-services list | Key it filters |
 | --- | --- | --- |
-| Home button | `com.gathin.tvhome/.HomeKeyService` | `KEYCODE_ALL_APPS` (not an ordinary `KEYCODE_HOME`) |
+| Home button | `com.gathin.tvhome/.HomeKeyService` | `KEYCODE_ALL_APPS` (an ordinary `KEYCODE_HOME` only with `home_long_press_home`, `config.xml` or a theme) and `KEYCODE_SETTINGS`, plus the keys in `settings_key_keycodes` and `app_keys` (`config.xml` or a theme) and in `settings_key_scancodes` (`config.xml` only) |
 | Input button | `com.gathin.tvhome/.InputKeyService` | `KEYCODE_TV`, `KEYCODE_TV_INPUT`, plus the keycodes in `input_key_keycodes` and `app_keys` (`config.xml` or a theme) |
 
 A force stop of the launcher (Settings > Apps, a cleaner app, `am force-stop`) takes both helpers off
@@ -932,6 +1000,29 @@ it, and a supervisor must not start a second copy. Do not solve the reboot by le
 something local can restart it — port 5555 reachable from the LAN is a shell on the TV for anything on the
 network, which is why the closing step in [README](../README.md#questions-people-ask) turns it off.
 
+## The Netflix button still opens Netflix, and a key helper never sees it (TCL UnionTV)
+
+**Seen on:** a TCL UnionTV (`ro.product.model` UnionTV, Android 9, `PPR2.180905.006.A1`, remote `TCL_RC802VEM`)
+with the launcher as Home and `InputKeyService` and `HomeKeyService` both enabled.
+
+The Netflix button sends keycode 4062 (scancode 0, `deviceId=-1`). With `4062:<package>` in `app_keys` the
+button still opened Netflix and the mapped app never started. `logcat` shows why:
+
+- `interceptKeyTq keycode=4062` is logged, then an `ActivityManager START ... com.netflix.ninja/.MainActivity`
+  about 60 ms later **from Netflix's own uid**. The firmware sends the key to Netflix's `NetflixKeyReceiver`
+  (action `com.netflix.ninja.intent.action.NETFLIX_KEY`, a `signature|privileged` permission), and Netflix
+  starts itself before any window gets the key.
+- `pm disable com.netflix.ninja/.NetflixKeyReceiver` is refused for the shell user (`Shell cannot change
+  component state`). Disabling the whole app works: `pm disable-user --user 0 com.netflix.ninja` (undo with
+  `pm enable com.netflix.ninja`). Do that only if the person does not use Netflix.
+- With Netflix disabled the button does nothing, and `logcat` shows `Unhandled key: win=Window{... com.gathin.tvhome/...MainActivity}, keyCode=4062`:
+  the key reaches the focused window, but the two accessibility helpers still never get it, so `app_keys`
+  has no effect. The firmware appears to inject this key after the input filter the helpers sit on.
+
+So on this set only the focused window can answer the button, and only while Home is in front. Find the
+keycode first (`tools/tv.py 'logcat -d -v time | grep interceptKeyTq'` right after pressing the button),
+because `getevent -lt` did not show it in the captures taken here.
+
 ## A key helper is bound and a held remote button stopped repeating
 
 Hold volume up or down and the volume moves one step per press instead of ramping. The remote may be
@@ -980,6 +1071,15 @@ handled go dead, the same trade without a `settings` write. Write back the exact
 printed; the empty list also unbinds TalkBack. Bisect, keycodes and limits:
 [the G09 note](devices/tcl-55p71b-g09-key-repeat.md).
 
+Where launcherx is what answers the buttons, keeping it enabled and redirecting its home screen keeps both. On a
+Sony BRAVIA VU3 (`BRAVIA_VU3_4K`, Google TV 14, `UKR1.240726.001`) the Netflix, YouTube, Prime Video and YouTube
+Music buttons are global keys (`BUTTON_4`, `BUTTON_14`, `BUTTON_2`, `BUTTON_15`) routed to
+`com.realtek.advancesetting`, which on a Google TV hands each launch to launcherx's `GlobalButtonLaunch_Receiver`
+and drops it when launcherx is disabled. `InputKeyService` with their scancodes in `app_keys` opened all four but
+cost the ramp, and the volume key never reached the helper, so `consume_volume_keys` could not repeat it.
+launcherx enabled, `stock_home_redirect` set to it, `key_filter` false and `HomeKeyService` bound gave the buttons,
+the ramp and the new Home together ([the VU3 notes](../examples/sony-bravia-vu3/README.md)).
+
 A [Sony KD-55X9000H PA-firmware follow-up](devices/sony-kd-55x9000h.md#later-remote-key-follow-up-24-october-2026) on Android 12 reproduced the same filter/repeat conflict with a personal fork. Its simultaneous kernel/callback capture saw held Volume in hardware but neither Volume direction in the helper. A separate saved-layout experiment retained Apps and native Volume without key filtering; it requires that fork's companion and Library entry, reserves an application-launch category, and has not been tested across restart/sleep/reconnect. It is not a stock upstream option.
 
 ## The power key does not wake the TV while the key helper is bound
@@ -1013,6 +1113,27 @@ first two writes are what make the opt-in survive, so read why:
 While the opt-in is on, `dumpsys accessibility` naming no `com.gathin.tvhome/.HomeKeyService` during
 standby is the opt-in working, not a fault: wake the TV and read it again. Only that helper stands down;
 `InputKeyService` keeps filtering, so the Input button still works.
+
+A power button that does nothing at all while the TV is **on**, with a long press opening the shutdown
+dialog instead, is a different fault: [a TCL 43BP615 whose stock launcher switched the TV off on one press](#a-power-press-that-does-nothing-and-a-long-press-opens-the-shutdown-dialog).
+
+## A power press that does nothing and a long press opens the shutdown dialog
+
+A press on the remote's power button does nothing, and a long press brings up Android's shutdown
+confirmation instead of turning the set off, where the stock launcher switched it off on one press.
+Checked on a TCL 43BP615 (BeyondTV, Android 11, SDK 30, #1608) after an ordinary
+`launcher/build-and-install.sh` with no key helper flags, and again with `HomeKeyService` bound through
+`settings put secure enabled_accessibility_services`: the dialog came up both times, so the helper is not
+what changes the key. The owner's reading is that the platform takes `KEYCODE_POWER` itself, in the
+window policy, before an application or an accessibility service is handed it, and the launcher maps no
+power key of its own (its only `KEYCODE_POWER` mention keeps the key out of the `power_on_home`
+handover) — so there is no `app_keys` entry, theme key or `config.xml` value that takes the press back.
+On this set the one-press power-off belonged to the firmware's own home screen and went with it.
+
+Nothing is broken: the install, the debloat and the key helper are not involved, and the shutdown dialog
+is Android's, so the TV still turns off from it. An owner who wants the one-press power-off back gets it by
+putting the stock launcher back — `tools/restore.sh <list> <stock launcher>` — and hands Home back to it
+at the same time.
 
 ## The soundbar on ARC/eARC falls asleep and the TV does not wake it
 

@@ -208,7 +208,12 @@
          entry with "hold:" for the same button's long press:
          "hold:KEYCODE_BUTTON_8:org.xbmc.kodi" opens Kodi when held for half a second, while the unprefixed entry
          still opens on a tap; "hold:scan:490:..." works for scancodes. A key with only a hold entry does nothing
-         on a tap. A listed app that is not installed leaves the button doing nothing. Leave empty to omit. -->
+         on a tap. A listed app that is not installed leaves the button doing nothing. Prefix an entry with "front:"
+         for what a tap does while the button's own app is already in front (HOME_KEY_SERVICE=1), and use
+         "guide:<package>" as a target to open that Live TV app's program guide: "172:com.vt.tv.tvcenter" with
+         "front:172:guide:com.vt.tv.tvcenter" makes the Hisense hengshan Live TV button open Live TV, then its guide,
+         where the firmware hands KEYCODE_GUIDE (172) to the stock launcher and no app ever receives it. Leave empty
+         to omit. -->
     <string-array name="app_keys" translatable="false">
         <item>190:com.google.android.youtube.tv</item>
     </string-array>

@@ -8,11 +8,13 @@
 A firmware update re-enables listed packages, hands Home back to the stock launcher and adds new
 preloads, and nothing in this repo notices: nobody runs disable.sh again, and restore.sh would undo
 the cleanup instead of redoing it. This command compares the TV with the list and exits 1 when the
-TV drifted, so it fits a cron job; --fix applies the list again without touching the recovery
-record (the packages were already recorded before the first run, so undo still means undo).
+TV drifted, so it fits a cron job; --fix applies the list again. It never writes a recovery record of
+its own (a record of the TV after cleanup would make undo leave the whole list disabled), but when
+this TV and list have one, it first adds what disable.sh would: the names the list gained since then,
+and a package the record calls absent that is installed and enabled now. Undo then still means undo.
 
-It reads the list, not the record: the record holds what the TV looked like *before* cleanup, which
-is what restore needs, while the target here is the list itself.
+It compares the TV with the list, not the record: the record holds what the TV looked like *before*
+cleanup, which is what restore needs, while the target here is the list itself.
 
 --fix runs the same safety checks as disable.sh before it disables anything (the Wi-Fi network
 setupwraith owns, the packages under the HDMI/AV inputs), because a firmware update is exactly the
@@ -24,7 +26,8 @@ Exit codes: 0 in sync (or fixed), 1 drift, an incomplete fix, or packages a safe
 --fix may be partial, and the next check says what is left), or the command line asked for something this
 script does not do, which includes naming a launcher the TV does not have. That last one matters:
 README.md tells an owner to run this from a weekly job and hear about it on exit 1, so a mistyped flag
-must not come back as drift, nor a mistyped launcher as "nothing drifted".
+must not come back as drift, nor a mistyped launcher as "nothing drifted". A recovery record --fix
+cannot read or update is 2 as well, with nothing changed on the TV.
 """
 import os
 import re
@@ -347,7 +350,8 @@ def main():
         return 2
     fixing = False
     try:
-        installed, _, home, back_on, gone, home_drifted, expected = inspect(dev, listed, preferred)
+        installed, disabled, home, back_on, gone, home_drifted, expected = inspect(dev, listed,
+                                                                                   preferred)
         if preferred and preferred not in installed:
             # The other half of the launcher check before the list was read: only the TV can say
             # whether the package is there.
@@ -357,12 +361,27 @@ def main():
             return 2
         code = report(list_path, listed, home, back_on, gone, home_drifted, expected)
         if code and wanted:
+            # restore.sh puts back only what the recovery record holds, so before anything is disabled,
+            # a record this TV and list already have gets the entries a second disable.sh run would add
+            # (recovery.extend_record). Without a record nothing is written: one taken now would hold
+            # the TV after cleanup. A record that cannot be used stops the run before anything reaches
+            # the TV, as it stops disable.sh.
+            path = recovery.find_record(list_path, os.environ.get("TV_HOST", ""))
+            if path.exists():
+                try:
+                    recovery.extend_record(path, recovery.load_record(path), listed, installed, disabled)
+                except OSError as e:
+                    sys.stderr.write(f"could not update the recovery record ({e}), so nothing was "
+                                     f"changed on the TV: without it, restore.sh would leave what "
+                                     f"--fix disables off.\n")
+                    return 2
             fixing = True
             code = fix(dev, listed, back_on, home_drifted, preferred)
     except SystemExit as e:
         # recovery.query_packages stops with its own message when the TV answers no package at all:
-        # the TV could not be read, so exit 2, not the 1 Python gives that message. Under --fix the
-        # exits keep their code, as above.
+        # the TV could not be read, so exit 2, not the 1 Python gives that message. find_record and
+        # load_record do the same for a recovery record --fix cannot use. Under --fix the exits keep
+        # their code, as above.
         if fixing:
             raise
         sys.stderr.write(f"{e}\n")

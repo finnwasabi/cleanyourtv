@@ -44,6 +44,16 @@ public final class QuickSettingsActivity extends Activity {
         super.onCreate(state);
         setContentView(R.layout.activity_quick_settings);
         density = getResources().getDisplayMetrics().density;
+        if (getResources().getBoolean(R.bool.rtl_menu_bar)) {
+            View panel = findViewById(R.id.panel);
+            android.widget.FrameLayout.LayoutParams position =
+                    (android.widget.FrameLayout.LayoutParams) panel.getLayoutParams();
+            position.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
+            int inset = position.getMarginEnd();
+            position.setMarginEnd(0);
+            position.setMargins(inset, position.topMargin, 0, position.bottomMargin);
+            panel.setLayoutParams(position);
+        }
         findViewById(R.id.scrim).setOnClickListener(v -> finish());
         LinearLayout rows = findViewById(R.id.rows);
         if (addInputs(rows)) addSeparator(rows);
