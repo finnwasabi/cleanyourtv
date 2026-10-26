@@ -214,4 +214,36 @@ public class RemoteKeysTest {
         remote.up("1:191:0", 1700, 1000, "tap", "hold");
         assertEquals(Arrays.asList("tap", "hold"), remote.opened);
     }
+
+    /**
+     * This fork's app_keys (values/config.xml): 190 opens YouTube, once per press. The remote repeats a held key, and
+     * with InputKeyService off HomeKeyService is the only one filtering, so each DOWN and UP arrives once.
+     */
+    @Test public void theYouTubeKeyOpensYouTubeOncePerPress() {
+        String youtube = "com.google.android.youtube.tv";
+        Map<Integer, String> keys = parse("190:" + youtube);
+        assertEquals(youtube, keys.get(190));
+        assertTrue(parseHold("190:" + youtube).isEmpty());
+        Remote remote = new Remote();
+        remote.down("1:190:0", 1000, null);
+        // Auto-repeats while the button is held: no second launch, no hold.
+        remote.presses.down("1:190:0", 1050, 1, null, remote.opened::add);
+        remote.presses.down("1:190:0", 1100, 2, null, remote.opened::add);
+        remote.up("1:190:0", 1200, 1000, keys.get(190), null);
+        remote.holdTimeout();
+        // The next press opens it again, once.
+        remote.down("1:190:0", 3000, null);
+        remote.up("1:190:0", 3100, 3000, keys.get(190), null);
+        assertEquals(Arrays.asList(youtube, youtube), remote.opened);
+        assertTrue(remote.holds.isEmpty());
+    }
+
+    /** A long press of 190 with no hold entry still opens YouTube on release, once. */
+    @Test public void aHeldYouTubeKeyWithoutAHoldEntryOpensOnRelease() {
+        Remote remote = new Remote();
+        remote.down("1:190:0", 1000, null);
+        remote.holdTimeout();
+        remote.up("1:190:0", 1900, 1000, "com.google.android.youtube.tv", null);
+        assertEquals(Arrays.asList("com.google.android.youtube.tv"), remote.opened);
+    }
 }
