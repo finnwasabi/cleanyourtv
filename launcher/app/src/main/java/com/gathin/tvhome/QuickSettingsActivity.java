@@ -28,6 +28,11 @@ import java.util.Set;
  * own, so the app behind keeps running and Back returns to it. Pressing Settings again closes the panel.
  */
 public final class QuickSettingsActivity extends Activity {
+    @Override
+    protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(LauncherLocale.wrap(base));   // locale
+    }
+
 
     /** android.settings.SOUND_SETTINGS opens the combined Display & Sound page; TV vendors answer this one. */
     private static final String ACTION_TV_SOUND = "com.android.tv.action.VIEW_SOUND_SETTINGS";
