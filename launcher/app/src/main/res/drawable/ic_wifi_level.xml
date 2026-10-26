@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- icon_bar (fork): the Wi-Fi icon by signal level, 0 (offline) to 4; MainActivity sets the level. -->
+<level-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:maxLevel="0" android:drawable="@drawable/ic_wifi_l0" />
+    <item android:maxLevel="1" android:drawable="@drawable/ic_wifi_l1" />
+    <item android:maxLevel="2" android:drawable="@drawable/ic_wifi_l2" />
+    <item android:maxLevel="3" android:drawable="@drawable/ic_wifi_l3" />
+    <item android:maxLevel="4" android:drawable="@drawable/ic_wifi_l4" />
+</level-list>

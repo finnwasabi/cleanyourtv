@@ -284,6 +284,11 @@
     <!-- Inputs, Wi-Fi and Settings folded into one round gear at the top right, like Google TV: OK drops a menu
          with the three, hold OK keeps the launcher menu. Off by default; a theme can set "top_menu": true. -->
     <bool name="top_menu">false</bool>
+    <!-- Fork: Inputs, Wi-Fi, AirPlay and Settings as icons in one shared capsule, the focused one a white circle.
+         Inputs opens the TV's only HDMI port at once (hold OK for the Inputs menu; with more ports it opens the
+         menu), Wi-Fi shows the signal level, AirPlay opens the receiver in audio_receivers (lit while it plays,
+         in place of the Now playing pill). Ignored with top_menu. -->
+    <bool name="icon_bar">true</bool>
     <!-- A direct Launcher settings action instead of TV Settings in the header (or top_menu).
          Off by default; a theme can set "launcher_settings_button": true. -->
     <bool name="launcher_settings_button">false</bool>

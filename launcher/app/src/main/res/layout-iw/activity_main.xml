@@ -383,6 +383,15 @@
                     android:drawableStart="@drawable/ic_settings"
                     android:nextFocusDown="@+id/grid" />
 
+                <!-- icon_bar (fork): opens the AirPlay receiver, or the session it is playing. -->
+                <TextView
+                    android:id="@+id/btnAirPlay"
+                    style="@style/TopButtonIcon"
+                    android:visibility="gone"
+                    android:contentDescription="@string/airplay"
+                    android:drawableStart="@drawable/ic_airplay"
+                    android:nextFocusDown="@+id/grid" />
+
                 <TextView
                     android:id="@+id/btnLibraryTop"
                     style="@style/TopButtonIcon"
