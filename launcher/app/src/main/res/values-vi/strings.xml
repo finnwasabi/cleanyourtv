@@ -12,6 +12,7 @@
     <string name="not_connected">Không có thiết bị</string>
     <string name="live_tv">Truyền hình</string>
     <string name="no_inputs">Không tìm thấy nguồn vào</string>
+    <string name="more_inputs">Nguồn vào khác</string>
     <!-- Vietnamese greets the same way at any hour. -->
     <string name="good_morning">Xin chào</string>
     <string name="good_afternoon">Xin chào</string>
@@ -105,33 +106,12 @@
     <string name="weather_rain">Có mưa</string>
     <string name="weather_heavy_rain">Mưa to</string>
     <string name="weather_storm">Dông</string>
-    <string-array name="quotes">
-        <item>Mỗi ngày một bước nhỏ.</item>
-        <item>Có công mài sắt, có ngày nên kim.</item>
-        <item>Chậm mà chắc.</item>
-        <item>Nước chảy đá mòn.</item>
-        <item>Kiến tha lâu cũng đầy tổ.</item>
-        <item>Thất bại là mẹ thành công.</item>
-        <item>Bắt đầu từ chỗ bạn đang đứng.</item>
-        <item>Làm xong còn hơn làm hoàn hảo.</item>
-        <item>Tiến chậm vẫn là tiến.</item>
-        <item>Nghỉ một chút, rồi đi tiếp.</item>
-        <item>Hôm nay là ngày tốt để bắt đầu.</item>
-        <item>Đi một ngày đàng, học một sàng khôn.</item>
-        <item>Bạn đã từng vượt qua chuyện khó hơn.</item>
-        <item>Mỗi người giỏi đều từng là người mới.</item>
-        <item>Làm cho đơn giản, rồi làm cho tốt hơn.</item>
-        <item>Một việc một lúc thôi.</item>
-        <item>Hãy tử tế với chính mình hôm nay.</item>
-        <item>Áp lực tạo nên kim cương.</item>
-        <item>Muốn đi xa, hãy đi cùng nhau.</item>
-        <item>Cứ đi rồi sẽ đến.</item>
-    </string-array>
     <string name="tile_add_to_dock">Thêm vào dock</string>
     <string name="tile_replace_in_dock">Thay bằng ứng dụng khác</string>
     <string name="dock_edit_pick_place">Chọn vị trí trên dock cho ứng dụng này rồi nhấn OK. Nhấn Quay lại để hủy.</string>
     <string name="festival_dussehra_greeting">Chúc mừng lễ Dussehra</string>
     <string name="festival_diwali_greeting">Chúc mừng lễ Diwali</string>
+    <string name="festival_halloween_greeting">Chúc mừng Halloween</string>
     <string name="stats_memory">Bộ nhớ %1$d / %2$d MB</string>
     <string name="stats_storage">Còn trống %1$s</string>
     <string name="rows_below_dock_label">Số hàng dưới dock</string>
@@ -157,4 +137,30 @@
     <string name="race_countdown_days">%1$d ngày %2$d giờ</string>
     <string name="last_opened">Mở lần cuối %1$s</string>
     <string name="tile_move">Di chuyển</string>
+    <string name="game_live">Đang diễn ra</string>
+    <string name="clock_format_system">Hệ thống</string>
+    <string name="clock_format_12">12 giờ</string>
+    <string name="clock_format_24">24 giờ</string>
+    <string-array name="quotes">
+        <item>Mỗi ngày một bước nhỏ.</item>
+        <item>Có công mài sắt, có ngày nên kim.</item>
+        <item>Chậm mà chắc.</item>
+        <item>Nước chảy đá mòn.</item>
+        <item>Kiến tha lâu cũng đầy tổ.</item>
+        <item>Thất bại là mẹ thành công.</item>
+        <item>Bắt đầu từ chỗ bạn đang đứng.</item>
+        <item>Làm xong còn hơn làm hoàn hảo.</item>
+        <item>Tiến chậm vẫn là tiến.</item>
+        <item>Nghỉ một chút, rồi đi tiếp.</item>
+        <item>Hôm nay là ngày tốt để bắt đầu.</item>
+        <item>Đi một ngày đàng, học một sàng khôn.</item>
+        <item>Bạn đã từng vượt qua chuyện khó hơn.</item>
+        <item>Mỗi người giỏi đều từng là người mới.</item>
+        <item>Làm cho đơn giản, rồi làm cho tốt hơn.</item>
+        <item>Một việc một lúc thôi.</item>
+        <item>Hãy tử tế với chính mình hôm nay.</item>
+        <item>Áp lực tạo nên kim cương.</item>
+        <item>Muốn đi xa, hãy đi cùng nhau.</item>
+        <item>Cứ đi rồi sẽ đến.</item>
+    </string-array>
 </resources>
