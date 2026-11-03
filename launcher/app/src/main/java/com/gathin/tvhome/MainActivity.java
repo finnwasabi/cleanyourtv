@@ -392,6 +392,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private List<String> dockApps;
     /** fill_dock false: the dock can have empty slots, which reorder mode leaves out and restores afterwards. */
     private boolean fillDockLeavesSlots;
+    /** Reorder mode was opened by "Move" in a tile's menu: putting that one tile down ends it. */
+    private boolean menuMove;
     /** Edit-dock mode (Settings menu): a reorder session that swaps one chosen app into one dock place. */
     private boolean dockEditing;
     /** Dock place being changed in edit-dock mode, or -1 while the place is still being chosen. */
@@ -1802,7 +1804,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
                     return true;
                 default:
                     if (ok || back) {
-                        if (!down) drop();
+                        if (!down) {
+                            drop();
+                            if (menuMove) endReorder();
+                        }
                         return true;
                     }
                     return super.dispatchKeyEvent(event);
@@ -2000,6 +2005,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     /** Ends the mode and saves the order if it changed since the mode started. */
     private void endReorder() {
         if (!reordering) return;
+        menuMove = false;
         dockEditing = false;
         dockEditSlot = -1;
         dockEditAppKey = null;
@@ -4554,11 +4560,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
         }
         if (position < adapter.movableCount()) addSettingsMenuRow(rows, popup, R.string.tile_move, () -> {
             if (!beginReorder()) return;
+            menuMove = true;
             int at = adapter.positionOf(key);   // beginReorder can rebuild the tiles
             if (at < 0) return;
             focusTile(at);
             pickUp(at);
-            Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
+            Toast.makeText(this, R.string.tile_move_hint, Toast.LENGTH_LONG).show();
         });
         if (appLibraryEnabled) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
             if (LibraryApps.save(this, pkg, false)) reloadApps(false);
@@ -4590,9 +4597,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, C
     private void addSettingsMenuRow(LinearLayout rows, PopupWindow popup, int title, Runnable action) {
         View row = getLayoutInflater().inflate(R.layout.item_input, rows, false);
         row.findViewById(R.id.icon).setVisibility(View.GONE);
-        row.findViewById(R.id.dot).setVisibility(View.GONE);
-        row.findViewById(R.id.status).setVisibility(View.GONE);
-        ((TextView) row.findViewById(R.id.title)).setText(title);
+        // A one-line row: without the empty port line under it the title sits centred, and without the icon's
+        // margin the text has the same inset on both sides.
+        row.findViewById(R.id.subRow).setVisibility(View.GONE);
+        TextView label = row.findViewById(R.id.title);
+        ((ViewGroup.MarginLayoutParams) ((View) label.getParent()).getLayoutParams()).setMarginStart(0);
+        label.setText(title);
         row.setOnClickListener(v -> {
             popup.dismiss();
             action.run();
