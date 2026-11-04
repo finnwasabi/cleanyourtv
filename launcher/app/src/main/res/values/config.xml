@@ -487,7 +487,8 @@
          strings.xml). Theme key "greeting_quotes". -->
     <bool name="greeting_quotes">true</bool>
     <!-- Switches Wireless debugging back on after every restart and Wi-Fi reconnect (Android turns it off), so the
-         paired computer can reach the TV without anyone opening Developer options. Needs
+         paired computer can reach the TV without anyone opening Developer options. Turns USB debugging back on first
+         when it is off, since Wireless debugging does not stay on without it. Needs
          pm grant com.gathin.tvhome android.permission.WRITE_SECURE_SETTINGS once; does nothing without it. -->
     <bool name="keep_wireless_debugging">true</bool>
     <!-- Receivers that play without a session Home can read (AirPlay audio): while music plays and no session names
