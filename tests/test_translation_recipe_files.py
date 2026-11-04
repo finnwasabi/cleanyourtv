@@ -114,7 +114,8 @@ class TranslationRecipeTest(unittest.TestCase):
         # The bullet's parenthesis is the list a translator reads for their own language, so it is
         # held to the folders on disk rather than being prose that can fall behind.
         named = named_folders(PAGE.read_text(encoding="utf-8"))
-        self.assertGreaterEqual(len(named), 3, "read too few step-2 bullets to prove anything")
+        # This fork has no fonts.xml (Be Vietnam Pro covers every locale), so step 2 names two files, not three.
+        self.assertGreaterEqual(len(named), 2, "read too few step-2 bullets to prove anything")
         files = locale_files()
         for name, folders in sorted(named.items()):
             with self.subTest(file=name):
