@@ -57,6 +57,12 @@ final class WirelessDebugging {
                 != PackageManager.PERMISSION_GRANTED) return;
         try {
             if (!GATE.due(Settings.Global.getInt(context.getContentResolver(), KEY, 0) == 1)) return;
+            // Wireless debugging does not stay on with USB debugging off, and a power cut can leave that off
+            // (a Wanbo X7 came back with adb_enabled 0, so the switch-on below was undone and ADB stayed shut).
+            if (Settings.Global.getInt(context.getContentResolver(), Settings.Global.ADB_ENABLED, 0) == 0) {
+                Settings.Global.putInt(context.getContentResolver(), Settings.Global.ADB_ENABLED, 1);
+                Log.i("TvHome.Adb", "USB debugging switched back on");
+            }
             Settings.Global.putInt(context.getContentResolver(), KEY, 1);
             GATE.switchedOn(onWifi(context));
             Log.i("TvHome.Adb", "Wireless debugging switched back on");
