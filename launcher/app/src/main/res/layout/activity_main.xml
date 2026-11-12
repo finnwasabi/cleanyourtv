@@ -216,6 +216,7 @@
                         android:textSize="52sp"
                         android:fontFamily="@font/bevietnam_light"
                         android:letterSpacing="-0.04"
+                        android:fontFeatureSettings="tnum"
                         android:includeFontPadding="false" />
 
                     <TextClock
