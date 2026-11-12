@@ -60,7 +60,7 @@ public final class QuickSettingsActivity extends Activity {
         // Picture takes the focus, so Settings then OK lands where the gear went before. The TV's full
         // Settings last, under a rule. Launcher settings stay on Home (hold OK on the Settings pill).
         View picture = addRow(rows, R.drawable.ic_picture, getString(R.string.quick_picture), null,
-                SystemSettings.intent(this, Settings.ACTION_DISPLAY_SETTINGS));
+                SystemSettings.displayIntent(this));
         addRow(rows, R.drawable.ic_sound, getString(R.string.quick_sound), null, soundSettings());
         addRow(rows, R.drawable.ic_wifi, getString(R.string.quick_network), null,
                 SystemSettings.intent(this, Settings.ACTION_WIFI_SETTINGS));
