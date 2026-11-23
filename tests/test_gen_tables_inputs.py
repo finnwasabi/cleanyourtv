@@ -16,6 +16,7 @@ import contextlib
 import errno
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,33 @@ def run(*args, cwd=None):
 def valid(tmp):
     """The small checkout tests/test_gen_tables.py builds: examples/ with two folders and the three files."""
     return tree(tmp, [("tcl-a", tv("TCL A", "TCL")), ("sony-b", tv("Sony B", "Sony"))])
+
+
+class FontTest(unittest.TestCase):
+    def test_an_empty_font_is_refused_before_writing_tables_or_adopting_metadata(self):
+        # An unset shell variable in --font "$FONT" is an explicit unusable path, not an omitted option.
+        for mode in ("rewrite", "check", "adopt"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                root = valid(tmp)
+                args = ["--root", str(root), "--font", ""]
+                if mode == "adopt":
+                    add(root, "tcl-d", None)
+                    patch = root / "pr.diff"
+                    patch.write_text("| `tcl-d/` | TCL D | Android TV 11 | ads off |\n", encoding="utf-8")
+                    args += ["--adopt", str(patch)]
+                else:
+                    add(root, "tcl-c", tv("TCL C", "TCL"))
+                    if mode == "check":
+                        args += ["--check"]
+                before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+                code, out, err = run(*args, cwd=root)
+                after = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+                self.assertEqual(after, before, "a refused font must not publish tables or metadata")
+                self.assertEqual(code, 2, err)
+                self.assertEqual(out, "")
+                self.assertIn("font", err)
+                self.assertIn("''", err)
+                self.assertNotIn("Traceback", err)
 
 
 class RootTest(unittest.TestCase):
@@ -70,6 +98,42 @@ class RootTest(unittest.TestCase):
             code, _, err = run("--root", str(root), "--check")
             self.assertEqual(code, 2, err)
             self.assertIn(f"--root '{root}'", err)
+
+    def test_a_root_the_filesystem_refuses_to_stat_is_the_not_read_exit(self):
+        # A --root whose name is longer than NAME_MAX - or one under a folder this user may not
+        # traverse - used to end the run in an OSError as a traceback, exit 1: the answer the
+        # README-tables job reads as "the tables are out of date", over a run that read nothing at all.
+        # It is a stat this run asks for itself (stat_folder), not `Path.is_dir()`, which on Python
+        # 3.14 answers False for this name instead of raising: the case holds on every version.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / ("a" * 300)
+            try:
+                os.stat(root)
+            except OSError:
+                pass
+            else:
+                self.skipTest("this filesystem stats a 300-character name")
+            code, out, err = run("--root", str(root), "--check")
+            self.assertEqual(code, 2, err)
+            self.assertIn(f"--root '{root}'", err)
+            self.assertIn("cannot be looked at", err)
+            self.assertIn("Nothing was read or written", err)
+            self.assertNotIn("Traceback", err)
+            self.assertEqual(out, "")
+
+    def test_an_os_error_from_the_root_check_is_the_same_reason(self):
+        # The same branch without a filesystem that refuses one: a root this user may not look at, on
+        # any platform, in-process - the shape MetadataReadTest injects for the same reason. The stat
+        # is what read_inputs asks (stat_folder), not `Path.is_dir()`, which on Python 3.14 answers
+        # False for this error instead of raising it.
+        refused = PermissionError(errno.EACCES, "Permission denied")
+        root = Path("/somebody elses checkout")
+        with mock.patch.object(Path, "stat", side_effect=refused):
+            patch, reason = gen_tables.read_inputs(root, None)
+        self.assertIsNone(patch)
+        self.assertIn(str(root), reason)
+        self.assertIn("Permission denied", reason)
+        self.assertIn("Nothing was read or written", reason)
 
     def test_a_folder_that_is_not_a_checkout_names_what_is_missing(self):
         with tempfile.TemporaryDirectory() as tmp:

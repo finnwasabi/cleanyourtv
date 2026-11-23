@@ -13,7 +13,10 @@ build-and-install.sh, or the steps in addons/README.md; tools/theme.sh or theme.
 
 install on an installed add-on updates it (pm install -r). show prints every picture a switch's row carries in
 docs/switches.md, since a few keys have two (the pill up and at rest for `vpn_pill`), and a reader who copies
-only the first path would see half of what the page documents. set writes the key into a theme folder of your own and
+only the first path would see half of what the page documents. status asks the TV which package answers HOME
+with the launcher's own MainActivity, because a build made with -PlauncherApplicationId (some firmware only lets
+an allowlisted name be Home) keeps the class and moves the id: that is the package it reports, and the
+`/sdcard/Android/data/<id>/files/config.json` it reads the pushed theme from. set writes the key into a theme folder of your own and
 pushes it with the platform's theme script, as themes/README.md describes; it never edits a folder in this checkout, so pointing
 --theme at the project's themes/ or examples/ is refused before anything is written. set reads the value the way
 the key's own type in the Keys table needs - true or false for a bool, a JSON list, object or number where the
@@ -31,9 +34,17 @@ and that button would open nothing. A list of `"package=value"` entries (`app_la
 the '=' and a value after it, so an entry without both halves is refused rather than written as one the tile never
 reads, and so is an `app_banners` name the launcher cannot draw: AppAdapter.bundledBanner() answers null for anything
 but a `banner_*` drawable this checkout ships, so `com.netflix.ninja=magenta` is a banner the theme says is set and
-the tile never shows. A theme's config.json is hand-edited, so one
+the tile never shows. The two keys the Inputs menu reads a vendor number out of are read the same way:
+`input_sources` entries one at a time, since InputSources.mapped() skips an entry it cannot match to an input id,
+and `source_panel_extra` as the `"name=value"` pair openSourcePanel() sends, since a value without a name or a
+whole number before the '=' sends no extra at all. A `wallpaper_moods` object is read group by group for the same
+reason: Config.moods() walks WallpaperMood.ALL's morning, evening and night and keeps only a name
+ThemeFiles.collectionImage() accepts, and WallpaperMood.select() answers a group holding none of the collection's
+pictures with the whole collection, so a group named anything else, an empty group, and a name this theme does not
+ship in `wallpapers/` are refused rather than written as a group that never shows. A theme's config.json is hand-edited, so one
 that cannot be read, is not JSON, or is not a JSON object is named before the key is written, and a write it cannot
-make says so instead of ending in a traceback.
+make says so instead of ending in a traceback. An edit whose UTF-8 config would exceed the launcher's 64 KB
+read limit is refused before writing or pushing; the previous file is kept.
 set's own arguments are read first: a switch without a value, a --theme without the folder behind it, and a word
 left over are answered with the usage line and exit 2 before a theme folder is read or written. list, status,
 show, install and remove read their own words the same way, before anything is read from this checkout or asked
@@ -43,11 +54,14 @@ A --theme folder that is not there is refused by name, not made: set starts a co
 of your own that exists, and the push it ends with replaces the theme on the TV and empties that theme's
 wallpapers, so a mistyped path would leave a one-key theme behind.
 
-On Windows, theme install and set use PowerShell (pwsh, or powershell when pwsh is not on PATH), without loading
-profiles or changing execution policy. Add-ons with their own shell installer still need Bash; an install whose bash
+On Windows, theme install and set use PowerShell (pwsh, or powershell when pwsh is not on PATH) with
+-ExecutionPolicy Bypass - the flag every .ps1 command these pages hand out carries - so the script still loads
+under the Restricted policy Windows 10 and 11 ship; the flag applies to that one process and changes nothing on
+the machine. No profile is loaded. Add-ons with their own shell installer still need Bash; an install whose bash
 or Gradle wrapper cannot start says which and what to install, and exits 1 before anything is built or pushed. A theme install
 takes only its name; script arguments belong to add-ons. If set saves the local file but the push fails, it
-reports that separately: the TV may have received only part of the theme.
+reports that separately: exit 2 means nothing was sent to the TV, any other code means the TV may have
+received only part of the theme.
 
 Exit status: 0 the command ran, 1 a command on the TV or a script this checkout runs failed, 2 the command line
 asked for something this script does not do - a command it does not have, or a word the command would drop - which
@@ -56,11 +70,14 @@ the TV: no TV_HOST, a checkout with no tools/venv, and a TV tools/tv.py answered
 (a refused port, a Wireless debugging port that answers TLS, an address with no route to it). check.py answers the
 first two of those with 2 as well, and b64push.py the second.
 """
+import datetime
+import errno
 import json
 import math
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -69,52 +86,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
 LAUNCHER_PKG = "com.gathin.tvhome"
+# The launcher does not always run under its default id: some firmware only lets a package name it allowlists be
+# Home, so launcher/app/build.gradle takes -PlauncherApplicationId and the device notes send people there
+# (docs/devices/xiaomi-mitv-mftr0-debloat-home.md wants com.ts.launcher on a China Xiaomi set, and
+# docs/devices/skyworth-7t861-a23.md com.coocaa.tvhome on a Coocaa one). The activity class does not move with
+# the id - it is always <applicationId>/com.gathin.tvhome.MainActivity - so the TV is asked which package wears
+# it, with the same HOME query tools/disable.sh reads its claimants with. status read the default id and its
+# directory, so on such a set it answered "launcher: not installed" about an installed launcher and "theme: none
+# (the built-in config.xml)" about a theme it had just pushed (#3703).
+LAUNCHER_ACTIVITY = "com.gathin.tvhome.MainActivity"
+CLAIM_QUERY = "cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME"
+LAUNCHER_ID = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")
 
 
 # ---------------------------------------------------------------- reading the repo
+# The README tables are read back through tools/tables.py, the one Markdown-table reader in the
+# repo (gen_tables.py writes them; this reads them; the schema is documented there).
 
-def table_rows(text, header_start):
-    """Rows of the first Markdown table whose header starts with header_start, as lists of cell strings."""
-    rows, inside = [], False
-    for line in text.splitlines():
-        if line.startswith(header_start):
-            inside = True
-            continue
-        if inside:
-            if not line.startswith("|"):
-                if rows:
-                    break
-                continue
-            if re.match(r"^\|[\s:|-]+\|$", line):
-                continue
-            rows.append([c.strip() for c in line.strip().strip("|").split(" | ")])
-    return rows
-
-
-def img_src(cell):
-    m = re.search(r'<img src="([^"]+)"', cell or "")
-    return m.group(1) if m else None
-
-
-def img_srcs(cell):
-    """Every <img src> in a cell, in the order the page draws them.
-
-    docs/switches.md lets one row show more than one picture - `vpn_pill` carries the pill up and the pill at
-    rest - and tests/test_switches.py already reads every one of them. A reader that stops at the first `<img
-    src>` reports half of what the page gives the key, which is what `show` did while the page grew a second
-    picture per row. A picture with no src keeps its place as an empty string, as that page's own reader has it.
-    """
-    out = []
-    for tag in re.findall(r"<img\b[^>]*>", cell or ""):
-        m = re.search(r'\bsrc="([^"]*)"', tag)
-        out.append(m.group(1) if m else "")
-    return out
-
-
-def plain(cell):
-    """A Markdown cell as text: links to their words, code marks dropped."""
-    s = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cell or "")
-    return s.replace("`", "").strip()
+# `python3 -I tools/manage.py`, the form its header gives, leaves the script's own folder off sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from tables import img_src, img_srcs, plain, table_rows  # noqa: E402
 
 
 def addons(root=ROOT):
@@ -261,6 +252,7 @@ def number_in_range(key, item, parsed, text):
 # The Keys-table cell of a list the launcher reads with intArray() - `[83, 176]` for the remote buttons those
 # keys add. A list with anything else in it is answered with the built-in default, not the list.
 KEYCODES = "list of keycodes"
+JAVA_INT_MAX = 2147483647
 
 
 def keycode_problem(values):
@@ -280,6 +272,10 @@ def keycode_problem(values):
             return f"{entry} is not a whole number (the launcher reads it as {int(entry)})"
         if int(entry) < 1:
             return f"{int(entry)} is below 1"
+        if int(entry) > JAVA_INT_MAX:
+            # intValue() keeps the low 32 bits: 4294967297 becomes keycode 1, 4294967296 becomes 0.
+            wrapped = (int(entry) + 2**31) % 2**32 - 2**31
+            return f"{int(entry)} is above {JAVA_INT_MAX}, the largest the launcher reads; it would read {wrapped}"
     return None
 
 
@@ -329,6 +325,8 @@ def app_key_problem(entry):
         if not APP_KEY_NAME.fullmatch(code):
             return (f"{entry!r}: {code!r} is not a key the launcher reads, which is a keycode (190) or a "
                     f"KEYCODE_ name (KEYCODE_BUTTON_3)")
+        if code == "KEYCODE_UNKNOWN":
+            return f"{entry!r}: {label} 0 is not a button the launcher reads, which keeps only a key above 0"
     elif int(code) < 1:
         return f"{entry!r}: {label} 0 is not a button the launcher reads, which keeps only a key above 0"
     return app_key_target_problem(entry, target)
@@ -464,6 +462,154 @@ def banner_problem(values, root=ROOT):
     return None
 
 
+# The half of a value both Inputs-menu readers hand to Integer.parseInt(), after the '='. Java's parse takes an
+# optional sign and digits only, and throws on anything outside an int, which is caught and answered with "no
+# number": openSourcePanel() swallows the NumberFormatException, and mapped() answers null, "not mapped".
+INT_MIN, INT_MAX = -2 ** 31, 2 ** 31 - 1
+
+
+def whole_number(text):
+    """True when Integer.parseInt() reads the whole of text as an int."""
+    if not re.fullmatch(r"[+-]?\d+", text):
+        return False
+    return INT_MIN <= int(text) <= INT_MAX
+
+
+def input_source_problem(values):
+    """The first input_sources entry InputSources.mapped() cannot read, or None.
+
+    mapped() reads one entry at a time:
+
+        int equals = mapping.indexOf('=');
+        if (equals <= 0 || !mapping.substring(0, equals).trim().equals(input)) continue;
+        String value = mapping.substring(equals + 1).trim();
+        if (value.equals("-")) return -1;
+        try { return Integer.parseInt(value); } catch (NumberFormatException ignored) { return null; }
+
+    where `input` is the input id's last part (`HW5` out of `.../.hdmi.HDMIInputService/HW5`). So an entry with no
+    '=', with the '=' first, or with a '/' in its left half matches no input at all, and one whose right half is
+    neither '-' nor a whole number answers null - the row is not mapped - while the theme says the number is set.
+    The loop returns on the first entry naming an input, so a second entry for the same one is never read either.
+    """
+    seen = {}
+    for entry in values:
+        if not isinstance(entry, str):
+            return f"{entry!r} is not a string, and stringList() keeps only strings"
+        text = entry.strip()
+        equals = text.find("=")
+        if equals < 0:
+            return f"{entry!r} has no '=', so mapped() skips it and the row is not mapped"
+        left = text[:equals].strip()
+        right = text[equals + 1:].strip()
+        if not left:
+            return f"{entry!r} has nothing before its '=', so mapped() skips it and the row is not mapped"
+        if "/" in left:
+            return (f"{entry!r} names {left!r}, and mapped() compares that half with an input id's last part - "
+                    f"the text after its '/', such as `HW5` - so this entry matches no input")
+        if right != "-" and not whole_number(right):
+            return (f"{entry!r} gives {right!r} after the '=', which is neither `-` (hide the input) nor a whole "
+                    f"number mapped() can send, so it answers null and the row is not mapped")
+        if left in seen:
+            return (f"{entry!r} names {left!r} a second time, and mapped() returns on the first entry for an "
+                    f"input, so this one is never read")
+        seen[left] = text
+    return None
+
+
+def panel_extra_problem(text):
+    """The source_panel_extra value openSourcePanel() sends no extra for, or None.
+
+    openSourcePanel() reads
+
+        int eq = sourcePanelExtra.indexOf('=');
+        if (eq > 0) {
+            i.putExtra(sourcePanelExtra.substring(0, eq).trim(),
+                       Integer.parseInt(sourcePanelExtra.substring(eq + 1).trim()));
+        } catch (NumberFormatException ignored) {}
+
+    so a value with no '=', with nothing before it, or with a half that is not a whole number sends no extra at
+    all: the panel opens without the command the theme names (Coocaa OS's `control_center_command=100`). The
+    built-in default is the empty string, which is kept.
+    """
+    value = text.strip()
+    if not value:
+        return None
+    equals = value.find("=")
+    if equals <= 0:
+        return (f"{text!r} has no name before a '=', and openSourcePanel() sends an extra only when there is "
+                f"one, so the panel opens without it")
+    name = value[:equals].strip()
+    number = value[equals + 1:].strip()
+    if not name:
+        return (f"{text!r} has no name before its '=', and openSourcePanel() sends an extra only when there is "
+                f"one, so the panel opens without it")
+    if not whole_number(number):
+        return (f"{text!r} gives {number!r} after the '=', and openSourcePanel() catches the NumberFormatException "
+                f"a half that is not a whole number throws, so it sends no extra at all")
+    return None
+
+
+# The groups of a rotating wallpaper collection: WallpaperMood.ALL, the three Config.moods() walks
+# (`for (String mood : WallpaperMood.ALL)`), so a group named anything else - `dusk`, `Morning` - is never looked
+# at. Each name is then kept only when ThemeFiles.collectionImage() takes it, a name without a leading dot matched
+# whole by IMAGE, and WallpaperMood.select() answers a group holding none of the collection's pictures with the
+# whole collection. Every one of those is a group that never shows what the theme says it shows, with nothing on
+# the TV saying so. A shipped theme is held to both halves by tests/test_theme_wallpaper_moods.py; this is the
+# same rule for the folder set writes.
+WALLPAPER_MOODS = ("morning", "evening", "night")
+MOOD_PICTURE = re.compile(r"[A-Za-z0-9_.-]+\.(jpg|jpeg|png|webp)", re.IGNORECASE)
+WALLPAPERS = "wallpapers"
+
+
+def moods_problem(value, folder):
+    """The first wallpaper_moods group or picture name the launcher drops, or None.
+
+    The reader is three steps, and each drops what it cannot read without a word:
+
+        // Config.moods(JSONObject)
+        JSONArray names = o.optJSONArray(mood);           // only for mood in WallpaperMood.ALL
+        String name = names.optString(i, "").trim();
+        if (ThemeFiles.collectionImage(name)) group.add(name);
+
+        // WallpaperMood.select()
+        return group.isEmpty() ? all : group;
+
+    so a group named off the three, one that is not a list, an empty group, a name the launcher's filter refuses,
+    and a name the theme does not ship in `wallpapers/` all end as no group at that time of day: the whole
+    collection rotates through instead, and `set` has already reported the object as written.
+    """
+    if not isinstance(value, dict):
+        return f"{value!r} is not an object of groups"
+    allowed = ", ".join(WALLPAPER_MOODS[:-1]) + " or " + WALLPAPER_MOODS[-1]
+    pictures = None
+    for mood, names in value.items():
+        if mood not in WALLPAPER_MOODS:
+            return (f"the group {mood!r} is not one the launcher reads ({allowed}), so Config.moods() never "
+                    f"looks at it and its pictures never show")
+        if not isinstance(names, list):
+            return (f"the group {mood!r} holds {type(names).__name__}, not a list of picture names, so "
+                    f"Config.moods() drops the group")
+        if not names:
+            return (f"the group {mood!r} is empty, and WallpaperMood.select() answers an empty group with the "
+                    f"whole collection, so the group would change nothing")
+        for name in names:
+            if not isinstance(name, str) or not name.strip():
+                return f"the group {mood!r} holds {name!r}, which is not a picture name"
+            name = name.strip()   # moods() trims every name it reads
+            if name.startswith(".") or not MOOD_PICTURE.fullmatch(name):
+                return (f"the group {mood!r} names {name!r}, which ThemeFiles.collectionImage() refuses (a "
+                        f".jpg, .jpeg, .png or .webp name, and no leading dot), so Config.moods() drops it")
+            if pictures is None:
+                collection = folder / WALLPAPERS
+                pictures = ({p.name for p in collection.iterdir() if p.is_file()}
+                            if collection.is_dir() else set())
+            if name not in pictures:
+                return (f"the group {mood!r} names {name!r}, which this theme does not ship in "
+                        f"{WALLPAPERS}/: WallpaperMood.select() matches the kept names against the collection's "
+                        f"pictures, so a group holding none of them shows every picture instead")
+    return None
+
+
 # The string keys a Keys-table row names the values of, with the one the launcher answers instead and whether its
 # reader ignores case. Config.glowStyle() is `GLOW_HORIZON.equalsIgnoreCase(value.trim()) ? GLOW_HORIZON :
 # GLOW_RADIAL` and glassStyle() answers glass to anything else; WallpaperRotation.validOrder() is
@@ -540,6 +686,22 @@ def colour_value(key, text):
     return value
 
 
+def festival_until_problem(value):
+    """Why Festival.parse() would turn the skin off for this end date, or None."""
+    # Java's trim() drops only characters up to U+0020, so a no-break space stays and fails the parse.
+    text = value.strip("".join(map(chr, range(33))))
+    if not text:
+        return None
+    # fromisoformat() alone also takes 20261130 and 2026-W48-1, which LocalDate.parse() rejects.
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text, re.ASCII):
+        return f"{value!r} is not a date written like 2026-11-30"
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        return f"{value!r} is not a day on the calendar"
+    return None
+
+
 def value_as(key, item, text):
     """The argument read the way the key's type needs, or a refusal naming what the key takes."""
     kind = declared_kind(item)
@@ -550,14 +712,37 @@ def value_as(key, item, text):
             sys.exit(f"{key} is a bool, so pass true or false, not {text}")
         return text.strip().lower() == "true"
     if kind == "colour":
-        return colour_value(key, text)
+        # Colours are strings too: decode JSON string arguments as the other string keys do.
+        # Validate the decoded colour, so its JSON quotes cannot hide a malformed hex value.
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            parsed = text
+        return colour_value(key, parsed if isinstance(parsed, str) else text)
     if kind in (None, "string"):
         try:
             parsed = json.loads(text)
         except ValueError:
-            return enum_value(key, text)
-        # A string key is read as a String only, so `set greeting_name 42` means the text 42, not a number.
-        return enum_value(key, parsed if isinstance(parsed, str) else text)
+            value = enum_value(key, text)
+        else:
+            # A string key is read as a String only, so `set greeting_name 42` means the text 42, not a number.
+            value = enum_value(key, parsed if isinstance(parsed, str) else text)
+        if key == "festival_until":
+            problem = festival_until_problem(value)
+            if problem:
+                sys.exit(f"{key} takes YYYY-MM-DD or nothing, and {problem}. Festival.parse() turns the whole "
+                         f"festival skin off for a date it cannot read. Nothing was written or pushed.")
+        # Festival.parse(): Java trim() (characters up to U+0020), lowercase, then length() in UTF-16 units.
+        if key in ("festival", "seasonal_skin") and len(
+                value.strip("".join(map(chr, range(33)))).lower().encode("utf-16-le")) // 2 > 40:
+            sys.exit(f"{key} takes a name of at most 40 characters, and {value!r} is longer. Festival.parse() "
+                     f"returns no skin for a longer name, so the festival would be off. Nothing was written or "
+                     f"pushed.")
+        if key == "source_panel_extra":
+            problem = panel_extra_problem(value)
+            if problem:
+                sys.exit(f"{key} takes {item.get('type')}, and {problem}. Nothing was written or pushed.")
+        return value
     try:
         parsed = json.loads(text)
     except ValueError:
@@ -572,9 +757,9 @@ def value_as(key, item, text):
     if (item.get("type") or "").strip() == KEYCODES:
         problem = keycode_problem(parsed)
         if problem:
-            sys.exit(f"{key} takes {KEYCODES}, so every entry has to be a whole number of at least 1: {problem}, "
-                     f"and the launcher ignores the whole list when one entry is not, so those remote buttons "
-                     f"would do nothing. Nothing was written or pushed.")
+            sys.exit(f"{key} takes {KEYCODES}, so every entry has to be a whole number from 1 to {JAVA_INT_MAX}: "
+                     f"{problem}, and the launcher ignores the whole list when one entry is below 1, or maps another "
+                     f"button, so those remote buttons would not do what you set. Nothing was written or pushed.")
     if (item.get("type") or "").strip() == APP_KEYS:
         problem = app_keys_problem(parsed)
         if problem:
@@ -584,6 +769,14 @@ def value_as(key, item, text):
         # stringList() trims every entry it keeps, so the file holds what the TV reads.
         return [entry.strip() for entry in parsed or []]
     cell = (item.get("type") or "").strip()
+    if cell == "list of package names":
+        # Config.stringList() drops non-strings and strings empty after Java trim().
+        # Refuse before writing or pushing, rather than reporting a partly applied list.
+        # Java trim() removes only characters up to U+0020, unlike Python str.strip().
+        for index, entry in enumerate(parsed, 1):
+            if not isinstance(entry, str) or not entry.strip("".join(map(chr, range(33)))):
+                sys.exit(f"{key} takes {cell}, but entry {index} is not a non-empty string. "
+                         f"Config.stringList() would drop it. Nothing was written or pushed.")
     if cell.startswith(PAIR_CELLS):
         problem = package_pair_problem(parsed)
         if problem:
@@ -599,6 +792,15 @@ def value_as(key, item, text):
             if problem:
                 sys.exit(f"{key} takes {cell}, and this list has an entry the launcher cannot draw: {problem}. "
                          f"Nothing was written or pushed.")
+        return [entry.strip() for entry in parsed or []]
+    if key == "input_sources":
+        # InputSources.mapped() reads one entry at a time and answers null for one it cannot match to an input
+        # id, or cannot turn into a number: the row falls back to the standard path with no word on the TV.
+        problem = input_source_problem(parsed)
+        if problem:
+            sys.exit(f"{key} takes {cell}, and this list has an entry the Inputs menu would not map: {problem}. "
+                     f"Nothing was written or pushed.")
+        # mapped() trims both halves, so the file holds the mapping the launcher reads.
         return [entry.strip() for entry in parsed or []]
     return parsed
 
@@ -625,6 +827,27 @@ def json_kind(value):
     return type(value).__name__
 
 
+def looked_at(path):
+    """What is at `path`: ('folder'|'file'|'missing', None), or ('refused', why) when the filesystem will not say.
+
+    `Path.exists()` answers False for a path that is not there and re-raises every other OSError, so a --theme
+    whose name no filesystem can hold (a component longer than NAME_MAX), or a folder this user may not
+    traverse, ended the run in an OSError traceback with exit 1 - the status this file keeps for "a command on
+    the TV or a script this checkout runs failed", over a run that never looked at a TV and wrote nothing.
+    Judged once, with the reason, the shape becomes the refusal it was meant to be.
+    """
+    try:
+        info = os.stat(path)
+    except OSError as error:
+        # What Path.exists() answers with False for: nothing is there, or nothing that is a folder.
+        if error.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP, errno.EBADF):
+            return "missing", None
+        return "refused", (error.strerror or str(error))
+    except ValueError:      # a NUL in the name, which os.stat refuses before the filesystem sees it
+        return "missing", None
+    return ("folder" if stat.S_ISDIR(info.st_mode) else "file"), None
+
+
 def own_folder_problem(folder):
     """Why set may not write into `folder`, or None: it is one of the folders this checkout ships, a file, or
     not there at all."""
@@ -633,9 +856,14 @@ def own_folder_problem(folder):
         if folder == project or project in folder.parents:
             return (f"{folder} is inside this checkout's {name}/: set writes into a theme folder of your own, "
                     f"so copy one somewhere else first. Nothing was written or pushed.")
-    if folder.exists() and not folder.is_dir():
+    kind, why = looked_at(folder)
+    if kind == "refused":
+        return (f"{folder} cannot be looked at ({why}): --theme takes a theme folder of your own, and set writes "
+                f"into one that can be read. A name the filesystem refuses is usually a folder edited or pasted "
+                f"wrong. Nothing was written or pushed.")
+    if kind == "file":
         return f"{folder} is a file, not a folder: --theme takes a theme folder of your own."
-    if not folder.exists():
+    if kind == "missing":
         # A path with a file in the middle of it cannot be made at all, which is not a typo to point at the
         # folder for: name the file that is in the way, as the write used to.
         for parent in folder.parents:
@@ -707,7 +935,7 @@ def tv_python():
     raise SystemExit(2)
 
 
-def tv(command):
+def tv(command, quiet=False):
     if not os.environ.get("TV_HOST"):
         # The same two lines tools/tv.py prints for this, and the status check.py answers it with: without
         # TV_HOST there is no TV to ask anything, which is not the same as a command that failed on one.
@@ -719,6 +947,10 @@ def tv(command):
         sys.stderr.write("Nothing was asked of the TV.\n")
         raise SystemExit(2)
     r = subprocess.run([tv_python(), "-I", str(TOOLS / "tv.py"), command], capture_output=True, text=True)
+    # An answer this run can do without: `cmd package query-activities` is missing on some Android 8 firmware, and
+    # that is not a reason to stop a status that can still read the launcher's config.json.
+    if quiet:
+        return r.stdout if not r.returncode else ""
     # A failed read is unknown, not empty: never report "not installed" for a TV that didn't answer.
     if r.returncode:
         sys.stderr.write((r.stderr.strip() or r.stdout.strip()
@@ -731,6 +963,23 @@ def tv(command):
         # asked of it" cannot look like "the TV refused it".
         raise SystemExit(2 if r.returncode == 2 else 1)
     return r.stdout
+
+
+def launcher_package():
+    """The package the TV answers HOME with, when it wears this launcher's MainActivity, else the default id.
+
+    `com.gathin.tvhome` stays the answer for a TV that says nothing: it is the build almost every reader has, and a
+    set that cannot answer the query (an Android 8 firmware without `cmd package query-activities`) still gets the
+    directory that build writes.
+    """
+    for line in tv(CLAIM_QUERY, quiet=True).splitlines():
+        line = line.strip()
+        if not line.endswith("/" + LAUNCHER_ACTIVITY):
+            continue
+        candidate = line[: -len("/" + LAUNCHER_ACTIVITY)]
+        if LAUNCHER_ID.match(candidate):
+            return candidate
+    return LAUNCHER_PKG
 
 
 def installed_packages():
@@ -747,7 +996,10 @@ def theme_command(folder):
         shell = shutil.which("pwsh") or shutil.which("powershell")
         if not shell:
             sys.exit("PowerShell was not found: put pwsh or powershell on PATH. Nothing was written or pushed.")
-        return [shell, "-NoProfile", "-NonInteractive", "-File", str(TOOLS / "theme.ps1"), "-Theme", str(folder)]
+        # -ExecutionPolicy Bypass is the flag every .ps1 command these pages hand out carries: Windows 10 and 11
+        # ship Restricted, which refuses to load a script, and the flag covers that one process only (#3894).
+        return [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-File", str(TOOLS / "theme.ps1"), "-Theme", str(folder)]
     return ["bash", str(TOOLS / "theme.sh"), str(folder)]
 
 
@@ -862,12 +1114,16 @@ def cmd_show(name):
 
 def cmd_status():
     have = installed_packages()
-    print(f"launcher: {'installed' if LAUNCHER_PKG in have else 'not installed'}")
+    launcher = launcher_package()
+    # The id is named only when it is not the default one: a reader on the default build has nothing to check, and
+    # an owner who built under another id is looking for exactly this name.
+    print(f"launcher: {'installed' if launcher in have else 'not installed'}"
+          + (f" ({launcher})" if launcher != LAUNCHER_PKG else ""))
     print("add-ons on the TV:")
     for item in addons():
         if item["package"] in have:
             print(f"  {item['id']}")
-    config = tv(f"cat /sdcard/Android/data/{LAUNCHER_PKG}/files/config.json 2>/dev/null")
+    config = tv(f"cat /sdcard/Android/data/{launcher}/files/config.json 2>/dev/null")
     match = None
     if config.strip():
         try:
@@ -921,9 +1177,21 @@ def cmd_set(key, value, theme_folder):
     if problem:
         sys.exit(problem)
     parsed = value_as(key, item, value)   # before the file is written or anything is pushed
+    if key == "wallpaper_moods":
+        # The one refusal value_as() cannot make: whether a group's names are the pictures this theme ships is a
+        # question about the folder, which is this command's argument rather than the key's row.
+        problem = moods_problem(parsed, folder)
+        if problem:
+            sys.exit(f"{key} takes {item.get('type')}, and {problem}. Nothing was written or pushed.")
     command = theme_command(folder)
     data[key] = parsed
     f = folder / "config.json"
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    size = len(text.replace("\n", os.linesep).encode("utf-8"))
+    # Config.read(File) ignores the whole overlay above this limit, not just the edited key.
+    if size > 64 * 1024:
+        sys.exit(f"{f} would be {size} bytes: the launcher ignores a config larger than 64 KB "
+                 f"(65536 bytes). Nothing was written or pushed.")
     replaced = False
     try:
         # own_folder_problem() above refuses a missing folder; an existing empty one is valid.
@@ -942,7 +1210,7 @@ def cmd_set(key, value, theme_folder):
                 pass   # keep refusing a read-only file, even when its folder permits replacement
         with tempfile.TemporaryDirectory(prefix=".manage-config-", dir=target.parent) as staging:
             pending = Path(staging) / target.name
-            pending.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            pending.write_text(text, encoding="utf-8")
             if target.exists():
                 shutil.copymode(target, pending)
             os.replace(pending, target)
@@ -956,7 +1224,10 @@ def cmd_set(key, value, theme_folder):
                          f"The temporary folder may remain at {staging}. Continuing with the theme push.\n")
     print(f"{key} = {json.dumps(parsed)} in {f}")
     code = push_theme(command)
-    if code:
+    if code == 2:
+        sys.stderr.write(f"Saved {f} locally, but the theme push failed (exit 2): nothing was sent to the TV. "
+                         "The local edit was kept.\n")
+    elif code:
         sys.stderr.write(f"Saved {f} locally, but the theme push failed (exit {code}). "
                          "The TV may be only partly updated; the local edit was kept.\n")
     return code
@@ -1052,6 +1323,12 @@ def set_args(args):
 
 
 def main(argv):
+    # A console code page such as cp1252 cannot print every name; print a replacement character instead of stopping.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(platform_usage(__doc__))
         return 0
