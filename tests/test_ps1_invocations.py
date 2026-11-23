@@ -26,6 +26,16 @@ examples/tdsystems-ch17f40s-redwood wrote the TV the way a POSIX shell writes it
 the command to run, so those lines died too. The setting is `$env:TV_HOST = '<tv ip>'` as its own
 statement (or the script's own -TvHost), which is the shape the other pages and headers already use.
 
+The same crossing in the other direction is quieter, and it does not fail at all: a PowerShell parameter
+written after the shell script. `launcher/build-and-install.sh -HomeKeyService` takes no argument - the
+four shell scripts read their settings from the environment, and this one reads no argument whatsoever -
+so the word is dropped, the launcher is installed without the helper, and the page has described a step
+that did not happen. examples/chiq-m75q10s's README carried that line ("The owner declined
+`launcher/build-and-install.sh -HomeKeyService`"); it names the environment variable now, as its siblings
+dexp-65uhg2 and rocktek-gb1 do, with `-HomeKeyService` only in front of the .ps1 twin. A shell script's
+own flag is a double dash (`tools/theme.sh --reset`), so one dash and a capital letter after one of these
+scripts is the crossing, and it is what this file reads.
+
 A page that names a script in passing - "`tools\\disable.ps1` then disabled the wizard" - hands it no
 path and is not read as a command.
 
@@ -34,16 +44,27 @@ parameter fails the pages that still pass the old one instead of letting them go
 Run from the repository root: python3 -m unittest discover -s tests -v
 """
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Directories the other repository-wide walkers skip: build output, the CI venv, and a person's own
-# backups, screenshots and traces, which are gitignored.
-SKIP_DIRS = {".git", "venv", "node_modules", "build", ".gradle", "__pycache__", "shots", "backup", "traces"}
+# Directories the repository-wide walkers skip: build output, the CI venv, and a person's own backups,
+# screenshots, notes, traces and bench results, plus their ADB key - the folders .gitignore keeps out of
+# a checkout. tests/test_walks_skip_ignored_folders.py holds every walker to that list.
+SKIP_DIRS = {".git", "venv", "node_modules", "build", ".gradle", "__pycache__", "shots", "backup", "work",
+             "traces", "bench-results", "adbkey"}
 
 SCRIPT_RE = re.compile(r"([A-Za-z0-9_.\\/-]+\.ps1)\b")
+# The shell twin, named in a page: `launcher/build-and-install.sh`, `tools\disable.sh`.
+SHELL_SCRIPT_RE = re.compile(r"([A-Za-z0-9_.\\/-]+\.sh)\b")
+# What PowerShell binds and a shell script does not read: one dash and a capital letter. `--reset` and
+# `--fix` are the shell tools' own flags, and a lowercase word is not a parameter.
+SHELL_PS_PARAM = re.compile(r"^[\s`'\"]*(-[A-Z][A-Za-z0-9]*)")
+# The settings these scripts read instead of taking parameters, as their own usage blocks write them.
+SHELL_SETTINGS = ("HOME_KEY_SERVICE=1, INPUT_KEY_SERVICE=1, RESTORE_KEY_SERVICES=1, "
+                  "STOCK_LAUNCHER=<package> and TV_HOST=<tv ip>")
 # `-TvHost`, not the second half of `--fix`: a parameter is written with one dash and a letter.
 PARAM_RE = re.compile(r"(?<![\w-])-([A-Za-z][A-Za-z0-9]*)")
 POSITION_RE = re.compile(r"Position\s*=\s*(\d+)\s*\)")
@@ -229,9 +250,57 @@ def host_problems(text, resolve, block_of):
     return found
 
 
+def shell_invocations(text):
+    """(script token, argument text) for every `.sh` named in a line of text.
+
+    A page names a script in passing as often as it runs one, so only the argument text tells the two
+    apart: the reader below reads a parameter out of it.
+    """
+    for line in text.split("\n"):
+        for match in SHELL_SCRIPT_RE.finditer(line):
+            token = match.group(1)
+            if token == ".sh":
+                continue
+            # A URL path is somebody else's file, and a `<name>` placeholder names nothing.
+            if match.start() and line[match.start() - 1] in "/:<":
+                continue
+            if "<" in token or "*" in token:
+                continue
+            rest = line[match.end():]
+            stop = BREAK_RE.search(rest)
+            yield token, (rest[:stop.start()] if stop else rest)
+
+
+def shell_parameter_problems(text, resolve):
+    """A shell script handed a PowerShell parameter, as human-readable lines.
+
+    `launcher/build-and-install.sh -HomeKeyService` reads as the key helper being enabled, and the run
+    does not fail: the shell script takes no argument at all (it reads `HOME_KEY_SERVICE` from the
+    environment), so the word is dropped and the launcher is installed without the helper. Unlike the
+    reverse crossing, nothing answers - the page simply describes a step that did not happen.
+
+    `--reset` is `tools/theme.sh`'s own flag and a lowercase word is a path, so only one dash and a
+    capital letter is read. The .ps1 twin may take it: it is a parameter there.
+    """
+    found = []
+    for token, rest in shell_invocations(text):
+        if not resolve(token):
+            continue
+        match = SHELL_PS_PARAM.match(rest)
+        if not match:
+            continue
+        found.append(
+            f"{token} {match.group(1)}: a PowerShell parameter after the shell script, which takes none - "
+            f"the shell scripts read their settings from the environment ({SHELL_SETTINGS}), so the word "
+            f"is dropped and the step does not happen. Write the setting in front of it, as `TV_HOST=<tv ip> "
+            f"{token}`, or put `{match.group(1)}` in front of the .ps1 twin")
+    return found
+
+
 def problems(text):
     return (lines_problems(text, resolve_in_repo, param_block_of)
-            + host_problems(text, resolve_in_repo, param_block_of))
+            + host_problems(text, resolve_in_repo, param_block_of)
+            + shell_parameter_problems(text, resolve_in_repo))
 
 
 def importable_files():
@@ -243,18 +312,24 @@ def importable_files():
         yield path
 
 
-def resolve_in_repo(token):
+def resolve_in_repo(token, root=None):
     """The script sources a documented path could name, from the repository root.
 
     A path with a directory in it is taken as written (backslashes are Windows). A bare file name is
     looked up by name, since `build-and-install.ps1` is how the pages refer to the launcher's, the
     add-ons' and the tools' own scripts.
+
+    The skip list is read against the path inside the checkout, not against the absolute path: CI
+    checks the repository out under `/home/runner/work/...`, where an ancestor folder is called `work`
+    and every file would otherwise be pruned as a person's own note.
     """
+    root = ROOT if root is None else root
     cleaned = token.replace("\\", "/").lstrip("./")
     if "/" in cleaned:
-        path = ROOT / cleaned
+        path = root / cleaned
         return [path.read_text(encoding="utf-8-sig", errors="replace")] if path.is_file() else []
-    found = [p for p in ROOT.rglob(cleaned) if p.is_file() and not SKIP_DIRS & set(p.parts)]
+    found = [p for p in root.rglob(cleaned)
+             if p.is_file() and not SKIP_DIRS & set(p.relative_to(root).parts)]
     return [p.read_text(encoding="utf-8-sig", errors="replace") for p in found]
 
 
@@ -274,6 +349,17 @@ class WindowsCommandTest(unittest.TestCase):
         # tools, the launcher and the add-ons.
         self.assertGreaterEqual(read, 30, "the walk found almost no PowerShell commands")
         self.assertGreaterEqual(len(scripts), 5, "the walk resolved almost no scripts")
+
+    def test_the_walk_reads_the_shell_commands_too(self):
+        # The crossing is read from `.sh` tokens, so a walk that saw none of them would answer [] for
+        # the whole tree: the pages run these scripts by name in their hundreds.
+        seen = set()
+        for path in importable_files():
+            for token, _ in shell_invocations(path.read_text(encoding="utf-8-sig", errors="replace")):
+                if resolve_in_repo(token):
+                    seen.add(token.replace("\\", "/"))
+        for name in ("tools/disable.sh", "launcher/build-and-install.sh"):
+            self.assertIn(name, seen, f"the walk read no command naming {name}: {sorted(seen)}")
 
 
 class ProblemReaderTest(unittest.TestCase):
@@ -391,6 +477,56 @@ class ProblemReaderTest(unittest.TestCase):
     def test_a_script_with_no_tv_parameter_is_quiet(self):
         self.assertEqual([], self.host_reader(r"tools\docker-build.ps1 -Project launcher"))
         self.assertFalse(needs_tv(param_block_of(self.SCRIPTS["tools/docker-build.ps1"])))
+
+    # The other crossing: the Windows parameter written after the shell script.
+
+    SHELLS = ("launcher/build-and-install.sh", "tools/disable.sh", "tools/theme.sh")
+
+    def shell_reader(self, text):
+        def resolve(token):
+            return [token] if token.replace("\\", "/") in self.SHELLS else []
+        return shell_parameter_problems(text, resolve)
+
+    def test_a_powershell_parameter_after_the_shell_script_is_reported(self):
+        # The shape examples/chiq-m75q10s's README had: the helper named, the shell script told to take it.
+        found = self.shell_reader("The owner declined `launcher/build-and-install.sh -HomeKeyService` because "
+                                  "of the volume-ramp trade.")
+        self.assertEqual(1, len(found), found)
+        self.assertIn("-HomeKeyService", found[0])
+        self.assertIn("environment", found[0])
+        self.assertIn(".ps1 twin", found[0])
+
+    def test_the_environment_form_is_quiet(self):
+        for text in ("`HOME_KEY_SERVICE=1 launcher/build-and-install.sh`",
+                     "`HOME_KEY_SERVICE=1 STOCK_LAUNCHER=none launcher/build-and-install.sh`",
+                     "`TV_HOST=<tv ip> tools/theme.sh --reset`",
+                     "`TV_HOST=<tv ip> tools/disable.sh examples/acme/debloat.txt`"):
+            self.assertEqual([], self.shell_reader(text), text)
+
+    def test_the_windows_twin_may_take_the_parameter(self):
+        self.assertEqual([], self.shell_reader("`launcher/build-and-install.ps1 -HomeKeyService`"),
+                         "-HomeKeyService is a parameter of the .ps1 twin")
+
+    def test_a_page_that_only_names_the_script_is_quiet(self):
+        self.assertEqual([], self.shell_reader("`launcher/build-and-install.sh` installed it, then "
+                                               "`-HomeKeyService` was enabled by hand."))
+
+    def test_a_bare_name_resolves_below_a_folder_named_like_a_skipped_one(self):
+        """CI checks the repository out under `/home/runner/work/...`, and `work` is a folder we skip.
+
+        The skip is about the checkout's own layout (`AGENTS.md`'s notes folder), so it has to be read
+        against the path inside the root: read against the absolute path, every file under `/home/
+        runner/work/` was pruned and every page naming a script by its bare name was reported as a
+        script the repository does not ship - which is what CI answered before this test existed.
+        """
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "work" / "cleanyourtv"
+            (root / "tools").mkdir(parents=True)
+            (root / "tools" / "disable.ps1").write_text("param([string]$List)\n", encoding="utf-8")
+            (root / "work" / "notes").mkdir(parents=True)
+            (root / "work" / "notes" / "disable.ps1").write_text("# a note, not the script\n", encoding="utf-8")
+            self.assertEqual(1, len(resolve_in_repo("disable.ps1", root=root)))
+            self.assertEqual([], resolve_in_repo("no-such-script.ps1", root=root))
 
 
 if __name__ == "__main__":

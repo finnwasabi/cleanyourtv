@@ -24,6 +24,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 import manage  # noqa: E402
+import tables  # noqa: E402  the one Markdown-table reader in the repo, which manage.py imports
 
 JAVA = ROOT / "launcher" / "app" / "src" / "main" / "java" / "com" / "gathin" / "tvhome"
 CONFIG_JAVA = JAVA / "Config.java"
@@ -48,9 +49,9 @@ def constants(source, prefix):
 def keys_row(key):
     """The Keys-table row of a key in themes/README.md, as (type cell, meaning cell)."""
     text = README.read_text(encoding="utf-8")
-    for row in manage.table_rows(text[text.index("## Keys"):], "| Key |"):
+    for row in tables.table_rows(text[text.index("## Keys"):], "| Key |"):
         if key in re.findall(r"`([a-z_]+)`", row[0]):
-            return (manage.plain(row[1]), manage.plain(row[2]))
+            return (tables.plain(row[1]), tables.plain(row[2]))
     return None
 
 
@@ -137,6 +138,43 @@ class SetEnumTest(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertIsNone(self.set_key(key, value), f"{key} is free text, so {value!r} is fine")
                 self.assertEqual(self.written()[key], value)
+
+    def test_festival_until_refuses_a_date_the_launcher_cannot_read(self):
+        # Festival.parse() drops the whole skin for a date LocalDate.parse() rejects.
+        for value in ("tomorrow", "2026-11-31", "20261130", "2026-W48-1", "2026-1-5", "26-11-30", "2026-11-30T10:00",
+                      " 2026-11-30"):
+            with self.subTest(value=value):
+                refusal = self.set_key("festival_until", value)
+                self.assertIsNotNone(refusal, f"{value!r} was written, and the launcher turns the skin off for it")
+                self.assertIn("festival_until", refusal)
+                self.assertIn("Nothing was written or pushed", refusal)
+                self.assertIsNone(self.written())
+
+    def test_festival_until_takes_a_real_date_or_nothing(self):
+        for value in ("2026-11-30", " 2026-11-30 ", "\t2026-11-30\n", "2028-02-29", ""):
+            with self.subTest(value=value):
+                self.assertIsNone(self.set_key("festival_until", value))
+                self.assertEqual(self.written()["festival_until"], value)
+
+    def test_a_festival_name_over_40_characters_is_refused(self):
+        # Festival.parse() answers NONE for a trimmed name longer than 40, which turns the skin off.
+        for key in ("festival", "seasonal_skin"):
+            with self.subTest(key=key):
+                self.assertIsNone(self.set_key(key, "a" * 40))
+                self.assertIsNone(self.set_key(key, "  " + "a" * 40 + "  "))
+                self.config.unlink()
+                refusal = self.set_key(key, "a" * 41)
+                self.assertIsNotNone(refusal, "a 41-character name was written, and the launcher drops the skin")
+                self.assertIn(key, refusal)
+                self.assertIn("40", refusal)
+                self.assertIn("Nothing was written or pushed", refusal)
+                self.assertIsNone(self.written())
+                # Java counts UTF-16 units: 20 emoji are 40 units, 21 are 42.
+                self.assertIsNone(self.set_key(key, "\U0001f389" * 20))
+                self.config.unlink()
+                self.assertIsNotNone(self.set_key(key, "\U0001f389" * 21))
+                # Java trim() keeps a no-break space, so it counts toward the 40.
+                self.assertIsNotNone(self.set_key(key, " " + "a" * 40))
 
     def test_a_number_key_is_unaffected(self):
         self.assertIsNone(self.set_key("columns", "4"))

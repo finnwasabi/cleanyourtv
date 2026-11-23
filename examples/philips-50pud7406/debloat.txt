@@ -177,12 +177,59 @@
 # 56789/56790, so tools/philips-api.py and Home Assistant's philips_js have nothing to talk to. Ambilight + Hue is not
 # in this firmware either.
 # Not checked: live channels, Bluetooth devices, held volume on the TV's own speakers.
+#
+# NINTH UNIT (EU, Germany, German UI): Philips 43PUS8007/12, on Wi-Fi, nothing in the USB ports. The build of the seventh
+# unit: persist.odm.tpv.fw.revision=TPM216E_R.201.000.169.001, build UTT1.240424.001, ro.product.name=PH0M_EA_T32_2G,
+# Android 14, ro.config.low_ram=true (about 1.7 GB); About says "Philips UHD Android TV". Tested 3 days, with standby and
+# with two reboots. USB debugging alone opens 5555 (the RSA prompt appears); Wireless debugging was on as well, and both
+# were closed afterwards (tools/adb-closed.py: 5555 and the Wireless debugging port refused).
+# setupwraith owns the saved Wi-Fi network here too (cname=com.google.android.tungsten.setupwraith): left enabled.
+# With fastip disabled, the Source key still opens com.mediatek.wwtv.tvcenter's InputsPanelActivity (DTV, ATV, HDMI 1-4),
+# on an injected key and on the real remote; the org.droidtv Sources-drawer trap of the 50PUS8517 does not apply here.
+# The stock launcher's notification, Input and network icons were still there after the vendor batch (with fastip) and
+# gone after the Google batch (tvrecommendations, backdrop, feedback, partnersetup, onetimeinitializer,
+# autoinstalls.config.tpv.device), as on the eighth unit.
+# After a reboot the disabled list matched what was applied; quirk 5 shows too (the boot landed in tvcenter).
+# Home handed over to launcher/ on the first try. power_on_home with key_filter false (config.xml) and HOME_KEY_SERVICE=1:
+# after a reboot Home was in front from the first check, 5 s after boot_completed, through 30 s.
+# Real remote with the launcher as Home: Home, Source, Settings and the Netflix key work, and a held Volume Up ramps.
+# The Rakuten key does nothing with Rakuten TV disabled; app_keys would need key_filter, which stops the ramp.
+# Not checked: HDMI picture, live channels, firmware updates. Bluetooth works as before.
 
 # FIFTH UNIT (Italy): Philips 43PUS7406/12, Android TV 11, RTM2.210929.098.
 # Status: 2026-10-30 -- lived with after the changes. The five candidate Google packages below, `org.droidtv.tv.packageinfo`, `com.google.android.sss.authbridge`,
 # Freeview Play, CHILI and TalkBack stayed disabled after reboot. Home, Source, Settings, Netflix, YouTube
 # and Prime Video keys work on the real remote; Live TV and HDMI 4 show a picture. Assistant, Chromecast,
 # OTA and the MMP player stayed enabled.
+#
+# TENTH UNIT (EU, UK): Philips 43PUS7906/12, on Wi-Fi. The build of the third, fourth and eighth units:
+# persist.odm.tpv.fw.revision=TPM215E_R.101.000.198.158, persist.odm.tpv.region=eu,
+# ro.product.name=PH0M_EA_T32, Android 11 (SDK 30), ro.config.low_ram=true; About says
+# "2020/2021 UHD Android TV". Lived with for over a week.
+# Applied as written: the four telemetry lines, nettv.market, fusion.android.tv.demo, disclaimercustomization,
+# partnercustomizer, tvrecommendations, backdrop (screensaver moved to com.android.dreams.basic/.Colors,
+# quirk 1), the Google setup/sync packages, videos, youtube.tvmusic, talkback, play.games, Netflix and Prime
+# Video; also, by the owner's choice, com.google.android.katniss (Assistant), tv.wuaki.apptv (Rakuten),
+# org.droidtv.eum (Help; Source, Inputs and Live TV still work with it off), and com.android.tv.ota (the owner
+# stops firmware updates on purpose). Kept: Chromecast, the Play Store, and the Freeview apps (U, iPlayer,
+# ITVx, C4, C5). Home handed to launcher/ on the first try; setupwraith is installed but is not a HOME
+# claimant and owns no saved network. After each reboot the disabled list matched what was applied.
+# FREEVIEW CATCH-UP (iPlayer, ITVx, C4, C5) BLACK SCREEN or "Oops... Code: FVP-03-023": not the debloat. The
+# TV's own HbbTV setting "Block tracking sites" (Live TV > Options/Menu > HbbTV) blocks the hosts the Freeview
+# catch-up apps load, so they hang on the spinner and go black. Turning "Block tracking sites" OFF fixes every
+# Freeview catch-up app, and the setting survives standby and reboots once saved.
+# FREEVIEW "unable to connect" (FVP-03-023) after a power cut: the Freeview sign-in service held a client
+# certificate the server no longer accepts (logcat: mdsclient TLSV1_ALERT_DECRYPT_ERROR). `pm clear
+# uk.co.freeview.mdsclient` makes it sign in again and fixes iPlayer and ITVx. Do NOT clear
+# uk.co.freeview.fvpconfigauth (the factory Freeview identity).
+# USB PORT: this set has a single USB port in OTG mode. With USB debugging ON it runs in device mode
+# (sys.usb.controller=Mstar-udc) and USB sticks are not detected at all. After debugging work, turn USB
+# debugging off and either mains power-cycle or use the TV's own Settings > reboot (a hard reboot) to get USB
+# storage back.
+# REMOTE'S RAKUTEN KEY: TPVTvService catches keycode 249 (scancode 472) and launches tv.wuaki.apptv by an
+# explicit component, so the key never reaches the focused app; only the launcher's key helper can catch it,
+# and on this board any key-filtering service stops held Volume Up/Down from ramping (as the sixth unit found),
+# so remapping it costs the volume ramp. The owner left the key unmapped and kept the ramp.
 #
 # TPV / Philips telemetry
 org.droidtv.candeebug                       # "DAC" analytics uploader, as on the 50PUS8517
@@ -234,6 +281,10 @@ com.spotify.tv.android
 # Candidates from the seventh unit (Android 14, TPM216E), disabled there with no regression in one evening:
 # org.droidtv.fastip                          # Philips free-channel promos: promo, TOU and advertising-ID activities
 # org.droidtv.tv.packageinfo                  # InstalledPkgListService: INTERNET, boot receiver, reports installed apps
+#
+#
+# Candidate from the ninth unit (43PUS8007, Android 14, TPM216E), disabled there with no regression in three days:
+# com.google.android.tts                      # Google text-to-speech; TalkBack was disabled with it, keep both if anyone needs a screen reader
 #
 # Kept on purpose: com.google.android.katniss (Assistant/voice; the owners of the second and third unit disabled it), com.android.tv.ota (updates),
 # com.mediatek.wwtv.tvcenter, com.mediatek.tvinput, com.mediatek.tv.service, org.droidtv,
